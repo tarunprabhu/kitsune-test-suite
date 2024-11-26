@@ -5,49 +5,58 @@
 # Those languages will, therefore, only be enabled conditionally. Fortran
 # support will likely always be optional, so that will also only be enabled
 # after querying the kitsune installation using the kit-config utility.
-project(kitsune-test-suite
-  C CXX)
+project(kitsune-test-suite)
 
-option(KITSUNE_TEST_TAPIR_TARGETS
+set(KITSUNE_C "kitcc")
+set(KITSUNE_CXX "kit++")
+set(KITSUNE_Fortran "kitfc")
+set(KITSUNE_ALL_FRONTENDS
+  "${KITSUNE_C};${KITSUNE_CXX};${KITSUNE_Fortran}")
+set(KITSUNE_ALL_TAPIR_TARGETS "cuda;hip;opencilk;serial")
+
+set(KITSUNE_TEST_FRONTENDS "" CACHE STRING
+  "A space separated list of the Kitsune frontends to test. If this is not \
+set, all the available Kitsune frontends will be tested. The allowed values \
+in the list are: ${KITSUNE_ALL_FRONTENDS}")
+
+set(KITSUNE_SKIP_FRONTENDS "" CACHE STRING
+  "A space-separated list of the Kitsune frontends to skip. The allowed values \
+in the list are: ${KITSUNE_ALL_FRONTENDS}")
+
+set(KITSUNE_TEST_TAPIR_TARGETS "" CACHE STRING
   "A space-separated list of the tapir targets to test. If this is not set, \
-all Tapir targets enabled in Kitsune will be tested"
-  "")
+all Tapir targets enabled in Kitsune will be tested. The allowed values in the \
+list are: ${KITSUNE_ALL_TAPIR_TARGETS}")
 
-option(KITSUNE_SKIP_TAPIR_TARGETS
-  "A string-separated list of tapir targets to skip"
-  "")
+set(KITSUNE_SKIP_TAPIR_TARGETS "" CACHE STRING
+  "A string-separated list of tapir targets to skip. The allowed values in the \
+list are: ${KITSUNE_ALL_TAPIR_TARGETS}")
 
-option(KITSUNE_TEST_KOKKOS
-  "Test Kitsune's Kokkos support if it has been enabled in Kitsune"
+option(KITSUNE_TEST_KOKKOS_MODE
+  "Check Kitsune's -fkokkos-mode if it has been enabled"
+  ON)
+
+option(KITSUNE_TEST_KOKKOS_LANG
+  "Build the Kokkos (.kokkos.cpp) tests with a regular C++ compiler and run \
+them when the Kitsune's kokkos mode is tested"
   ON)
 
 option(KITSUNE_TEST_CUDA_LANG
-  "Run the cuda language (.cu) tests when the cuda tapir target is tested"
+  "Build and run the cuda (.cu) tests when the cuda tapir target is tested"
   OFF)
 
 option(KITSUNE_TEST_HIP_LANG
-  "Run the hip language (.hip) tests when the hip tapir target is tested"
+  "Build and run the hip (.hip) tests when the hip tapir target is tested"
   OFF)
-
-# Ideally, the kitsune tests should only be run using Kitsune as the compiler.
-# Right now, this is not the easiest thing to do because Kitsune reports its
-# own ID as "clang". We could change that, but that may require teaching cmake
-# about Kitsune. At some point, we might add something to Kitsune that can be
-# used to ensure that it is Kitsune that we are dealing with.
-
-# In principle, Kitsune "could" be built without C/C++ support. But that is
-# highly unlikely, so use the installation directory of the compiler to
-# determine the location of the kit-config utility.
-get_filename_component(COMPILER_BINDIR "${CMAKE_C_COMPILER}" DIRECTORY)
-
-find_program(KIT_CONFIG kit-config REQUIRED
-  PATHS ${COMPILER_BINDIR}
-  NO_DEFAULT_PATH)
-
-message(STATUS "Kitsune configuration tool: ${KIT_CONFIG}")
 
 set(TEST_CUDA_LANG ON)
 set(TEST_HIP_LANG ON)
+set(TEST_KOKKOS_LANG ON)
+
+set(TEST_C ON)
+set(TEST_CXX ON)
+set(TEST_Fortran ON)
+
 set(TEST_KOKKOS_MODE ON)
 set(TEST_CUDA_TARGET OFF)
 set(TEST_HIP_TARGET OFF)
@@ -59,14 +68,81 @@ set(TEST_QTHREADS_TARGET OFF)
 set(TEST_REALM_TARGET OFF)
 set(TEST_SERIAL_TARGET OFF)
 
-execute_process(COMMAND "${KIT_CONFIG}" "--kokkos-mode"
-  OUTPUT_VARIABLE KOKKOS_MODE_STR
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
+string(REPLACE " " ";" TEST_FRONTENDS "${KITSUNE_TEST_FRONTENDS}")
+string(REPLACE " " ";" SKIP_FRONTENDS "${KITSUNE_SKIP_FRONTENDS}")
 
-# If Kokkos mode has not been enabled in Kitsune, don't test Kokkos at all.
-# NOTE: This will also not disable testing of vanilla Kokkos.
-if (KOKKOS_MODE_STR STREQUAL "OFF" OR NOT KITSUNE_TEST_KOKKOS)
-  set(TEST_KOKKOS_MODE OFF)
+# The top-level CMakeLists.txt will have set the C and CXX languages which means
+# the C and C++ compilers will already have been set. If the compilers are
+# proper Kitsune frontends (which are the only ones that should be used with
+# this test suite), the kit-config utility should be present in the same
+# directory.
+get_filename_component(COMPILER_BINDIR ${CMAKE_CXX_COMPILER} DIRECTORY)
+find_program(KIT_CONFIG kit-config REQUIRED
+  PATHS ${COMPILER_BINDIR}
+  NO_DEFAULT_PATH)
+
+message(STATUS "Kitsune configuration tool: ${KIT_CONFIG}")
+
+# Check that the C, C++ and Fortran compilers are the same as those that were
+# found since this should only be setup with Kitsune.
+execute_process(COMMAND ${KIT_CONFIG} "--c-frontend"
+  OUTPUT_VARIABLE KITCC
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+if (KITCC STREQUAL "")
+  set(TEST_C OFF)
+elseif (NOT KITCC STREQUAL CMAKE_C_COMPILER)
+  message(FATAL_ERROR "C compiler is not Kitsune")
+elseif (NOT KITSUNE_TEST_FRONTENDS STREQUAL "")
+  if (NOT KITSUNE_C IN_LIST KITSUNE_TEST_FRONTENDS)
+    set(TEST_C OFF)
+  endif ()
+elseif (KITSUNE_C IN_LIST KITSUNE_SKIP_FRONTENDS)
+  set(TEST_C OFF)
+endif ()
+if (TEST_C)
+  message(STATUS "Testing frontend: ${KITSUNE_C}")
+endif ()
+
+execute_process(COMMAND ${KIT_CONFIG} "--c++-frontend"
+  OUTPUT_VARIABLE KITXX
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+if (KITXX STREQUAL "")
+  set(TEST_CXX OFF)
+elseif (NOT KITXX STREQUAL CMAKE_CXX_COMPILER)
+  message(FATAL_ERROR "C++ compiler is not Kitsune")
+elseif (NOT KITSUNE_TEST_FRONTENDS STREQUAL "")
+  if (NOT KITSUNE_CXX IN_LIST KITSUNE_TEST_FRONTENDS)
+    set(TEST_CXX OFF)
+  endif ()
+elseif (KITSUNE_CXX IN_LIST KITSUNE_SKIP_FRONTENDS)
+  set(TEST_CXX OFF)
+endif ()
+if (TEST_CXX)
+  message(STATUS "Testing frontend: ${KITSUNE_CXX}")
+endif ()
+
+execute_process(COMMAND ${KIT_CONFIG} "--fortran-frontend"
+  OUTPUT_VARIABLE KITFC
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+# The Fortran language may not have been enabled if TEST_SUITE_FORTRAN was not
+# set.
+if (NOT KITFC STREQUAL "" AND CMAKE_Fortran_COMPILER STREQUAL "")
+  set(CMAKE_Fortran_COMPILER ${KITFC})
+  enable_language(Fortran)
+endif ()
+if (KITFC STREQUAL "")
+  set(TEST_Fortran OFF)
+elseif (NOT KITFC STREQUAL CMAKE_Fortran_COMPILER)
+  message(FATAL_ERROR "Fortran compiler is not Kitsune")
+elseif (NOT KITSUNE_TEST_FRONTENDS STREQUAL "")
+  if (NOT KITSUNE_Fortran IN_LIST KITSUNE_TEST_FRONTENDS)
+    set(TEST_Fortran OFF)
+  endif ()
+elseif (KITSUNE_Fortran IN_LIST KITSUNE_SKIP_FRONTENDS)
+  set(TEST_Fortran OFF)
+endif ()
+if (TEST_Fortran)
+  message(STATUS "Testing frontend: ${KITSUNE_Fortran}")
 endif ()
 
 execute_process(COMMAND "${KIT_CONFIG}" "--tapir-targets"
@@ -79,56 +155,66 @@ string(REPLACE " " ";" SKIP_TAPIR_TARGETS "${KITSUNE_SKIP_TAPIR_TARGETS}")
 # If an explicit list of tapir targets to test has not been provided, test all
 # the enabled tapir targets. Otherwise, test the explicit list. All tapir
 # targets that were explicitly specified must have been enabled.
-if (${KITSUNE_TEST_TAPIR_TARGETS} STREQUAL "")
+if (KITSUNE_TEST_TAPIR_TARGETS STREQUAL "")
   set(TEST_TAPIR_TARGETS "${ENABLED_TAPIR_TARGETS}")
 else ()
   string(REPLACE " " ";" TEST_TAPIR_TARGETS "${KITSUNE_TEST_TAPIR_TARGETS}")
-  foreach (tapir_target IN ${TEST_TAPIR_TARGETS})
-    if (NOT ${tapir_target} IN_LIST ${ENABLED_TAPIR_TARGETS})
+  foreach (tapir_target IN TEST_TAPIR_TARGETS)
+    if (NOT tapir_target IN_LIST ENABLED_TAPIR_TARGETS)
       message(FATAL_ERROR "'${tapir_target}' has not been enabled")
     endif ()
   endforeach ()
 endif ()
 
 # Filter out any tapir targets to skip.
-foreach (tapir_target IN ${SKIP_TAPIR_TARGETS})
-  list(REMOVE_ITEM ${TEST_TAPIR_TARGETS} ${tapir_target})
+foreach (tapir_target ${SKIP_TAPIR_TARGETS})
+  message(STATUS "Skipping tapir target: ${tapir_target}")
+  list(REMOVE_ITEM TEST_TAPIR_TARGETS ${tapir_target})
 endforeach ()
 
-foreach (tapir_target IN ${KITSUNE_TEST_TAPIR_TARGETS})
-  if (${tapir_target} STREQUAL "cuda")
+foreach (tapir_target ${TEST_TAPIR_TARGETS})
+  if (tapir_target STREQUAL "cuda")
     set(TEST_CUDA_TARGET ON)
-  elseif (${tapir_target} STREQUAL "hip")
+  elseif (tapir_target STREQUAL "hip")
     set(TEST_HIP_TARGET ON)
-  elseif (${tapir_target} STREQUAL "lambda")
+  elseif (tapir_target STREQUAL "lambda")
     set(TEST_LAMBDA_TARGET ON)
-  elseif (${tapir_target} STREQUAL "omptask")
+  elseif (tapir_target STREQUAL "omptask")
     set(TEST_OMPTASK_TARGET ON)
-  elseif (${tapir_target} STREQUAL "opencilk")
+  elseif (tapir_target STREQUAL "opencilk")
     set(TEST_OPENCILK_TARGET ON)
-  elseif (${tapir_target} STREQUAL "openmp")
+  elseif (tapir_target STREQUAL "openmp")
     set(TEST_OPENMP_TARGET ON)
-  elseif (${tapir_target} STREQUAL "qthreads")
+  elseif (tapir_target STREQUAL "qthreads")
     set(TEST_QTHREADS_TARGET ON)
-  elseif (${tapir_target} STREQUAL "realm")
+  elseif (tapir_target STREQUAL "realm")
     set(TEST_REALM_TARGET ON)
-  elseif (${tapir_target} STREQUAL "serial")
+  elseif (tapir_target STREQUAL "serial")
     set(TEST_SERIAL_TARGET ON)
   else ()
     message(FATAL_ERROR "Unknown tapir target: ${tapir_target}")
   endif ()
-  message("Testing tapir target: ${tapir_target}")
+  message(STATUS "Testing tapir target: ${tapir_target}")
 endforeach ()
+
+# Testing Kitsune's -fkokkos mode
+execute_process(COMMAND "${KIT_CONFIG}" "--kokkos-mode"
+  OUTPUT_VARIABLE KOKKOS_MODE_STR
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+# If Kokkos mode has not been enabled in Kitsune, don't test Kokkos at all.
+if (KOKKOS_MODE_STR STREQUAL "OFF" OR NOT KITSUNE_TEST_KOKKOS_MODE)
+  set(TEST_KOKKOS_MODE OFF)
+endif ()
 
 # If the cuda tapir target is to be tested, we may also want to test the cuda
 # language (.cu) examples. This is typically if we want performance comparisons.
 # If we are only interested in Kitsune's correctness, this is not needed.
-set(TEST_CUDA_LANG ON)
-if (NOT ${KITSUNE_TEST_CUDA_LANG} OR NOT ${TEST_CUDA_TARGET})
+if (NOT KITSUNE_TEST_CUDA_LANG OR NOT TEST_CUDA_TARGET)
   set(TEST_CUDA_LANG OFF)
 endif ()
 
-if (${TEST_CUDA_LANG})
+if (TEST_CUDA_LANG)
   # We could use clang to compile the .cu files, but we use nvcc since we will
   # only be doing this when we are interested in running performance tests.
   execute_process(COMMAND "${KIT_CONFIG}" "--cuda-prefix"
@@ -141,12 +227,11 @@ if (${TEST_CUDA_LANG})
 endif ()
 
 # See the comments for the cuda language tests above. Same goes for hip.
-set(TEST_HIP_LANG ${KITSUNE_TEST_HIP_LANG})
-if (NOT ${KITSUNE_TEST_HIP_LANG} OR NOT ${TEST_HIP_TARGET})
+if (NOT KITSUNE_TEST_HIP_LANG OR NOT TEST_HIP_TARGET)
   set(TEST_HIP_LANG OFF)
 endif ()
 
-if (${TEST_HIP_LANG})
+if (TEST_HIP_LANG)
   # We could use clang to compile the .hip files, but we use hipcc since we will
   # only be doing this when we are interested in running performance tests.
   execute_process(COMMAND ${KIT_CONFIG} "--hip-prefix"
@@ -157,3 +242,12 @@ if (${TEST_HIP_LANG})
     PATHS ${HIP_PREFIX}/bin
     NO_DEFAULT_PATH)
 endif ()
+
+# Similar to Cuda and Hip, we may also want to check the .kokkos.cpp files with
+# a regular C++ compiler for performance checks. These are generally only useful
+# when doing performance comparisons.
+if (NOT KITSUNE_TEST_KOKKOS_LANG OR NOT TEST_KOKKOS_MODE)
+  set(TEST_KOKKOS_LANG OFF)
+endif ()
+
+add_subdirectory(vecadd)
