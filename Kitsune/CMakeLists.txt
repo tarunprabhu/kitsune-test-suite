@@ -49,6 +49,9 @@ option(KITSUNE_TEST_HIP_LANG
   "Build and run the hip (.hip) tests when the hip tapir target is tested"
   OFF)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
+message(STATUS "module path: ${CMAKE_MODULE_PATH}")
+
 set(TEST_CUDA_LANG ON)
 set(TEST_HIP_LANG ON)
 set(TEST_KOKKOS_LANG ON)
@@ -87,7 +90,8 @@ message(STATUS "Kitsune configuration tool: ${KIT_CONFIG}")
 # found since this should only be setup with Kitsune.
 execute_process(COMMAND ${KIT_CONFIG} "--c-frontend"
   OUTPUT_VARIABLE KITCC
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  COMMAND_ERROR_IS_FATAL ANY)
 if (KITCC STREQUAL "")
   set(TEST_C OFF)
 elseif (NOT KITCC STREQUAL CMAKE_C_COMPILER)
@@ -100,12 +104,19 @@ elseif (KITSUNE_C IN_LIST KITSUNE_SKIP_FRONTENDS)
   set(TEST_C OFF)
 endif ()
 if (TEST_C)
+  # Find clang because we may need to compile vanilla C code in the test suite.
+  # This should be the one on which Kitsune is based.
+  find_program(CLANG clang REQUIRED
+    PATHS ${COMPILER_BINDIR}
+    NO_DEFAULT_PATH)
+
   message(STATUS "Testing frontend: ${KITSUNE_C}")
 endif ()
 
 execute_process(COMMAND ${KIT_CONFIG} "--c++-frontend"
   OUTPUT_VARIABLE KITXX
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  COMMAND_ERROR_IS_FATAL ANY)
 if (KITXX STREQUAL "")
   set(TEST_CXX OFF)
 elseif (NOT KITXX STREQUAL CMAKE_CXX_COMPILER)
@@ -118,12 +129,19 @@ elseif (KITSUNE_CXX IN_LIST KITSUNE_SKIP_FRONTENDS)
   set(TEST_CXX OFF)
 endif ()
 if (TEST_CXX)
+  # Find clang++ because we may need to compile vanilla C++ code in the test
+  # suite. This should be the one on which Kitsune is based.
+  find_program(CLANGXX clang++ REQUIRED
+    PATHS ${COMPILER_BINDIR}
+    NO_DEFAULT_PATH)
+
   message(STATUS "Testing frontend: ${KITSUNE_CXX}")
 endif ()
 
 execute_process(COMMAND ${KIT_CONFIG} "--fortran-frontend"
   OUTPUT_VARIABLE KITFC
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  COMMAND_ERROR_IS_FATAL ANY)
 # The Fortran language may not have been enabled if TEST_SUITE_FORTRAN was not
 # set.
 if (NOT KITFC STREQUAL "" AND CMAKE_Fortran_COMPILER STREQUAL "")
@@ -142,12 +160,19 @@ elseif (KITSUNE_Fortran IN_LIST KITSUNE_SKIP_FRONTENDS)
   set(TEST_Fortran OFF)
 endif ()
 if (TEST_Fortran)
+  # Find flang because we may need to compile vanilla Fortran code in the test
+  # suite. This should be the one on which Kitsune is based.
+  find_program(FLANG flang REQUIRED
+    PATHS ${COMPILER_BINDIR}
+    NO_DEFAULT_PATH)
+
   message(STATUS "Testing frontend: ${KITSUNE_Fortran}")
 endif ()
 
 execute_process(COMMAND "${KIT_CONFIG}" "--tapir-targets"
   OUTPUT_VARIABLE TAPIR_TARGETS_STR
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  COMMAND_ERROR_IS_FATAL ANY)
 
 string(REPLACE " " ";" ENABLED_TAPIR_TARGETS "${TAPIR_TARGETS_STR}")
 string(REPLACE " " ";" SKIP_TAPIR_TARGETS "${KITSUNE_SKIP_TAPIR_TARGETS}")
@@ -230,10 +255,7 @@ endif ()
 if (NOT KITSUNE_TEST_HIP_LANG OR NOT TEST_HIP_TARGET)
   set(TEST_HIP_LANG OFF)
 endif ()
-
 if (TEST_HIP_LANG)
-  # We could use clang to compile the .hip files, but we use hipcc since we will
-  # only be doing this when we are interested in running performance tests.
   execute_process(COMMAND ${KIT_CONFIG} "--hip-prefix"
     OUTPUT_VARIABLE HIP_PREFIX
     OUTPUT_STRIP_TRAILING_WHITESPACE)
