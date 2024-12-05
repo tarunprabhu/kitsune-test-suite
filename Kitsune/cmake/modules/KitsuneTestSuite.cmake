@@ -1,4 +1,4 @@
-##===- SingleMultiSource.cmake --------------------------------------------===##
+##===- KitsuneTestSuite.cmake ---------------------------------------------===##
 #
 # This defines functions that are used by the Kitsune-specific tests in this
 # suite. They generally mimic the corresponding llvm_* functions in this suite.
@@ -25,7 +25,7 @@ include(SingleMultiSource)
 # These are done to distinguish them from the cuda and hip tapir targets.
 #
 # The other source languages that this will return are c, c++, and fortran
-# which are all what one might expect.
+# which are all what one would expect.
 #
 function (source_language source lang)
   # We treat Kokkos as its own language.
@@ -55,50 +55,53 @@ function (source_language source lang)
 endfunction ()
 
 function (kitsune_singlesource_test source lang tapir_target)
-  basename(base ${source})
-  if (${tapir_target} STREQUAL "none")
-    set(target "${base}-${lang}-lang")
+  # For now, we only run tests with Tapir. Anything that does not use a tapir
+  # target is only needed when we also want performance comparisons, not just
+  # correctness checks. That would involve dealing with other non-Kitsune
+  # compilers at the same time as running Kitsune which the LLVM test suite is
+  # not really setup to do. We could try and work around things, but, for now
+  # at least, just do enough to get things off the ground for correctness.
+  if (tapir_target STREQUAL "none")
+    return ()
+  elseif (NOT lang STREQUAL "kitc"
+      AND NOT lang STREQUAL "kitc++"
+      AND NOT lang STREQUAL "kokkos"
+      AND NOT lang STREQUAL "fortran")
+    # This can happen for .cu or .hip files. We don't want to deal with those
+    # for now. Eventually all of this should go away.
+    return ()
+  endif ()
+
+  get_filename_component(base "${source}" NAME)
+  if (tapir_target STREQUAL "none")
+    set(target "${base}.nokit")
   else ()
-    set(target "${base}-${tapir_target}")
+    set(target "${base}.${tapir_target}")
   endif ()
   set(test_name "${target}")
 
   message(STATUS "Setting up test: ${target}")
-  llvm_test_executable_no_test(${target} ${source})
-  llvm_test_traditional(${target})
-  llvm_add_test_for_target(${target})
+  llvm_test_executable(${target} ${source})
 
-  set_property(TARGET ${target} PROPERTY TEST_NAME "${test_name}")
-  if (lang STREQUAL "c")
-    target_compile_options(${target} PUBLIC
-      "${CMAKE_C_FLAGS}")
-  elseif (lang STREQUAL "c++")
-    target_compile_options(${target} PUBLIC
-      "${CMAKE_CXX_FLAGS}")
-  elseif (lang STREQUAL "cuda")
-    set_target_properties(${target} PROPERTIES
-      CUDA_COMPILER_LAUNCHER ${NVCC})
-  elseif (lang STREQUAL "hip")
-    set_target_properties(${target} PROPERTIES
-      HIP_COMPILER_LAUNCHER ${HIPCC})
-  elseif (lang STREQUAL "fortran")
-    target_compile_options(${target} PUBLIC
+  if (NOT tapir_target STREQUAL "none")
+    target_compile_options(${target} BEFORE PUBLIC
       "-ftapir=${tapir_target}")
-  elseif (lang STREQUAL "kitc")
-    target_compile_options(${target} PUBLIC
+    target_link_options(${target} BEFORE PUBLIC
       "-ftapir=${tapir_target}")
-  elseif (lang STREQUAL "kitc++")
-    target_compile_options(${target} PUBLIC
-      "-ftapir=${tapir_target}" "-fno-exceptions")
+  endif ()
+
+  if (lang STREQUAL "kitc++")
+    target_compile_options(${target} BEFORE PUBLIC
+      "-fno-exceptions")
   elseif (lang STREQUAL "kokkos")
-    target_compile_options(${target} PUBLIC
-      "-fkokkos" "-fkokkos-no-init" "-ftapir=${tapir_target}" "-fno-exceptions")
-  else ()
-    message(FATAL_ERROR "Unsupported language: ${lang} [${source}]")
+    target_compile_options(${target} BEFORE PUBLIC
+      "-fkokkos" "-fkokkos-no-init" "-fno-exceptions")
   endif ()
 endfunction()
 
 # Setup a single source test for all tapir targets that are being tested.
+# This is not intended to be used directly. Consumers should use
+# kitsune_singlesource()
 function(kitsune_singlesource_setup source lang)
   if (TEST_CUDA_TARGET)
     kitsune_singlesource_test(${source} ${lang} "cuda")
@@ -163,7 +166,13 @@ function(kitsune_singlesource)
         kitsune_singlesource_test(${source} "c++" "none")
       endif ()
       if (TEST_KOKKOS_MODE)
-        kitsune_singlesource_setup(${source} ${lang})
+        # We only care about testing Kokkos with the GPU-centric targets
+        if (TEST_CUDA_TARGET)
+          kitsune_singlesource_test(${source} ${lang} "cuda")
+        endif ()
+        if (TEST_HIP_TARGET)
+          kitsune_singlesource_test(${source} ${lang} "hip")
+        endif ()
       endif ()
     elseif (lang STREQUAL "kitc")
       if (TEST_C)
@@ -178,7 +187,7 @@ function(kitsune_singlesource)
         kitsune_singlesource_setup(${source} ${lang})
       endif ()
     else ()
-      message(FATAL_ERROR "Testing of file not supported: ${source}")
+      message(FATAL_ERROR "Testing of file not supported: ${source} [${lang}]")
     endif ()
   endforeach()
 endfunction()
