@@ -322,7 +322,7 @@ endif()
 add_subdirectory(litsupport)
 
 option(TEST_SUITE_COLLECT_COMPILE_TIME
-       "Measure compile time by wrapping compiler invocations in timeit" ON)
+       "Measure compile time by wrapping compiler invocations in timeit" OFF)
 if(TEST_SUITE_COLLECT_COMPILE_TIME)
   set(CMAKE_C_COMPILE_OBJECT "${CMAKE_BINARY_DIR}/tools/timeit --summary <OBJECT>.time ${CMAKE_C_COMPILE_OBJECT}")
   set(CMAKE_CXX_COMPILE_OBJECT "${CMAKE_BINARY_DIR}/tools/timeit --summary <OBJECT>.time ${CMAKE_CXX_COMPILE_OBJECT}")
