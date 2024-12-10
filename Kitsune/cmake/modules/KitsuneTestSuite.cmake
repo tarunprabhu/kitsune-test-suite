@@ -17,15 +17,11 @@ include(SingleMultiSource)
 #    kokkos     C++ files with Kokkos. These may or may not contain any
 #               Kitsune-specific extensions
 #
-# The "recognized as a language by a different name" are:
-#
-#    cuda-lang  Cuda files (those with a .cu extension)
-#    hip-lang   Hip files (those with a .hip extension)
-#
-# These are done to distinguish them from the cuda and hip tapir targets.
-#
-# The other source languages that this will return are c, c++, and fortran
-# which are all what one would expect.
+#    c          C files without kitsune-specific extensions
+#    c++        C++ files without kitsune-specific extensions
+#    fortran    Fortran files
+#    cuda       Cuda files (those with a .cu extension)
+#    hip        Hip files (those with a .hip extension)
 #
 function (source_language source lang)
   # We treat Kokkos as its own language.
@@ -40,9 +36,9 @@ function (source_language source lang)
   elseif (source MATCHES ".+[.]cpp$" OR source MATCHES ".+[.]cc$")
     set(${lang} "c++" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]cu$")
-    set(${lang} "cuda-lang" PARENT_SCOPE)
+    set(${lang} "cuda" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]hip$")
-    set(${lang} "hip-lang" PARENT_SCOPE)
+    set(${lang} "hip" PARENT_SCOPE)
   elseif (source MATCHES ".+[.][Ff]$" OR
       source MATCHES ".+[.][Ff]90$" OR
       source MATCHES ".+[.][Ff]95$" OR
@@ -54,34 +50,19 @@ function (source_language source lang)
   endif ()
 endfunction ()
 
+# Setup a single-source test for the given tapir target.
 function (kitsune_singlesource_test source lang tapir_target)
-  # For now, we only run tests with Tapir. Anything that does not use a tapir
-  # target is only needed when we also want performance comparisons, not just
-  # correctness checks. That would involve dealing with other non-Kitsune
-  # compilers at the same time as running Kitsune which the LLVM test suite is
-  # not really setup to do. We could try and work around things, but, for now
-  # at least, just do enough to get things off the ground for correctness.
-  if (tapir_target STREQUAL "none")
-    return ()
-  elseif (NOT lang STREQUAL "kitc"
-      AND NOT lang STREQUAL "kitc++"
-      AND NOT lang STREQUAL "kokkos"
-      AND NOT lang STREQUAL "fortran")
-    # This can happen for .cu or .hip files. We don't want to deal with those
-    # for now. Eventually all of this should go away.
-    return ()
-  endif ()
-
   get_filename_component(base "${source}" NAME)
   if (tapir_target STREQUAL "none")
     set(target "${base}.nokit")
   else ()
     set(target "${base}.${tapir_target}")
   endif ()
-  set(test_name "${target}")
 
   message(STATUS "Setting up test: ${target}")
-  llvm_test_executable(${target} ${source})
+  llvm_test_executable_no_test(${target} ${source})
+  llvm_test_run()
+  llvm_add_test_for_target(${target})
 
   if (NOT tapir_target STREQUAL "none")
     target_compile_options(${target} BEFORE PUBLIC
@@ -90,19 +71,20 @@ function (kitsune_singlesource_test source lang tapir_target)
       "-ftapir=${tapir_target}")
   endif ()
 
-  if (lang STREQUAL "kitc++")
+  if (lang STREQUAL "kitc++" OR lang STREQUAL "kokkos")
     target_compile_options(${target} BEFORE PUBLIC
       "-fno-exceptions")
-  elseif (lang STREQUAL "kokkos")
+  endif ()
+
+  if (lang STREQUAL "kokkos")
     target_compile_options(${target} BEFORE PUBLIC
-      "-fkokkos" "-fkokkos-no-init" "-fno-exceptions")
+      "-fkokkos" "-fkokkos-no-init")
   endif ()
 endfunction()
 
-# Setup a single source test for all tapir targets that are being tested.
-# This is not intended to be used directly. Consumers should use
-# kitsune_singlesource()
-function(kitsune_singlesource_setup source lang)
+# Add tests for all tapir targets being tested. This should not be used by
+# consumers. They should call kitsune_singlesource() instead.
+function(kitsune_singlesource_all_targets source lang)
   if (TEST_CUDA_TARGET)
     kitsune_singlesource_test(${source} ${lang} "cuda")
   endif ()
@@ -145,25 +127,17 @@ function(kitsune_singlesource)
     set(lang)
     source_language(${source} lang)
 
-    # Fortran is not yet supported. Complain loudly so we know to change this
-    # and take a closer look when Fortran is supported.
-    if (lang STREQUAL "fortran")
-      message(FATAL_ERROR "Kitsune does not yet support Fortran: ${source}")
-    endif ()
-
-    if (lang STREQUAL "cuda-lang")
+    if (lang STREQUAL "cuda")
       if (TEST_CUDA_LANG)
         kitsune_singlesource_test(${source} ${lang} "none")
       endif ()
-    elseif (lang STREQUAL "hip-lang")
+    elseif (lang STREQUAL "hip")
       if (TEST_HIP_LANG)
         kitsune_singlesource_test(${source} ${lang} "none")
       endif ()
     elseif (lang STREQUAL "kokkos")
       if (TEST_KOKKOS_LANG)
-        # This should be tested with a regular C++ compiler, so change the
-        # language to C++, otherwise, it will activate -fkokkos-mode in Kitsune.
-        kitsune_singlesource_test(${source} "c++" "none")
+        kitsune_singlesource_test(${source} ${lang} "none")
       endif ()
       if (TEST_KOKKOS_MODE)
         # We only care about testing Kokkos with the GPU-centric targets
@@ -176,15 +150,18 @@ function(kitsune_singlesource)
       endif ()
     elseif (lang STREQUAL "kitc")
       if (TEST_C)
-        kitsune_singlesource_setup(${source} ${lang})
+        kitsune_singlesource_all_targets(${source} ${lang})
       endif ()
-    elseif (lang STREQUAL "kitc++" AND TEST_CXX)
+    elseif (lang STREQUAL "kitc++")
       if (TEST_CXX)
-        kitsune_singlesource_setup(${source} ${lang})
+        kitsune_singlesource_all_targets(${source} ${lang})
       endif ()
-    elseif (lang STREQUAL "fortran" AND TEST_Fortran)
+    elseif (lang STREQUAL "fortran")
+      # Fortran is not yet supported. Complain loudly so we know to change this
+      # and take a closer look at everything when Fortran is supported.
+      message(FATAL_ERROR "Kitsune does not yet support Fortran: ${source}")
       if (TEST_Fortran)
-        kitsune_singlesource_setup(${source} ${lang})
+        kitsune_singlesource_all_targets(${source} ${lang})
       endif ()
     else ()
       message(FATAL_ERROR "Testing of file not supported: ${source} [${lang}]")
