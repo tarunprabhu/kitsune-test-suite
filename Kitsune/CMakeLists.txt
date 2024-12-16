@@ -282,4 +282,14 @@ if (TEST_KOKKOS_MODE AND KITSUNE_RUN_ALL)
   set(TEST_KOKKOS_LANG ON)
 endif ()
 
-add_subdirectory(vecadd)
+add_subdirectory(Benchmarks)
+
+# FIXME: The SingleSource directory contains tests that themselves have not been
+# checked for "sanity". Until then, we don't descend into it, but once we check
+# that those tests are actually sound, this should be enabled.
+# add_subdirectory(SingleSource)
+
+# FIXME: Not all tests in the MultiSource directory have valid CMakeLists.txt or
+# Makefile's yet. Until those are setup, don't descend into the directory at
+# all.
+# add_subdirectory(MultiSource)
