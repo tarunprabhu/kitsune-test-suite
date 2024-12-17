@@ -35,10 +35,10 @@ option(KITSUNE_TEST_KOKKOS_MODE
   ON)
 
 option(KITSUNE_RUN_ALL
-  "Build and run the non-Kitsune code. These will include the kokkos, cuda \
-(.cu), hip (.hip) and vanilla C, C++ and Fortran code depending on the \
-tapir targets and frontends that are being tested. This should only be set \
-when checking for performance regressions"
+  "Build and run the performance tests. The tests in the Benchmarks directory \
+are intended to be used for both correctness testing and performance. Setting \
+this option will result in the non-kitsune single-source tests (.cu, .hip \
+etc.) being built and run."
   OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
@@ -293,3 +293,5 @@ add_subdirectory(Benchmarks)
 # Makefile's yet. Until those are setup, don't descend into the directory at
 # all.
 # add_subdirectory(MultiSource)
+
+file(COPY lit.local.cfg DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
