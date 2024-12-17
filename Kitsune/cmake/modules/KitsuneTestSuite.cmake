@@ -52,16 +52,17 @@ endfunction ()
 
 # Setup a single-source test for the given tapir target.
 function (kitsune_singlesource_test source lang tapir_target)
-  get_filename_component(base "${source}" NAME)
+  get_filename_component(base "${source}" NAME_WLE)
+  string(REPLACE "." "-" base "${base}")
   if (tapir_target STREQUAL "none")
-    set(target "${base}.nokit")
+    set(target "${base}-nokit")
   else ()
-    set(target "${base}.${tapir_target}")
+    set(target "${base}-${tapir_target}")
   endif ()
 
   message(STATUS "Setting up test: ${target}")
   llvm_test_executable_no_test(${target} ${source})
-  llvm_test_run()
+  llvm_test_run(WORKDIR "%S")
   llvm_add_test_for_target(${target})
 
   if (NOT tapir_target STREQUAL "none")
@@ -84,6 +85,14 @@ endfunction()
 
 # Add tests for all tapir targets being tested. This should not be used by
 # consumers. They should call kitsune_singlesource() instead.
+#
+# ARGUMENTS
+#
+#     source     The absolute path to the source file
+#     lang       The source language
+#     cmdargs    A list of command line arguments to be passed when running the
+#                test
+#
 function(kitsune_singlesource_all_targets source lang)
   if (TEST_CUDA_TARGET)
     kitsune_singlesource_test(${source} ${lang} "cuda")
@@ -116,7 +125,18 @@ endfunction()
 
 # Configure the current directory as a SingleSource subdirectory - i.e. every
 # C/C++/Fortran file is treated as its own test.
+#
+# ARGUMENTS
+#
+#     <none>
+#
+# KEYWORD ARGUMENTS
+#
+#     CMDARGS    The list of command line arguments to be passed when running
+#                the test
+#
 function(kitsune_singlesource)
+  cmake_parse_arguments(KIT "" "" "CMDARGS" ${ARGN})
   file(GLOB sources
     *.c
     *.cpp *.cc
@@ -168,5 +188,3 @@ function(kitsune_singlesource)
     endif ()
   endforeach()
 endfunction()
-
-
