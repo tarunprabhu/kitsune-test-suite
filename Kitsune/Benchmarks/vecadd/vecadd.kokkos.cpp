@@ -1,5 +1,4 @@
 #include "Kokkos_Core.hpp"
-#include "Kokkos_DualView.hpp"
 
 #include <chrono>
 #include <iomanip>
