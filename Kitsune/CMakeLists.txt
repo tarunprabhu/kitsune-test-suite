@@ -30,6 +30,10 @@ set(KITSUNE_SKIP_TAPIR_TARGETS "" CACHE STRING
   "The list of tapir targets to skip. Each element of this list must be a \
 value that can be passed to the -ftapir= option of the frontend")
 
+set(KITSUNE_TEST_INPUT_SIZE "default" CACHE STRING
+  "The size of the input in the tests that support it. Must be one of \
+\"default\", or \"small\". Defaults to \"default\"")
+
 option(KITSUNE_TEST_KOKKOS_MODE
   "Check Kitsune's -fkokkos-mode if it has been enabled"
   ON)
@@ -203,9 +207,61 @@ endforeach ()
 
 foreach (tapir_target ${TEST_TAPIR_TARGETS})
   if (tapir_target STREQUAL "cuda")
-    set(TEST_CUDA_TARGET ON)
+    # It is possible that the cuda target has been built, but the device on
+    # which the tests are built (and run) does not have an NVIDIA GPU. In this
+    # case, skip the cuda target
+    execute_process(COMMAND "${KIT_CONFIG}" "--cuda-prefix"
+      OUTPUT_VARIABLE CUDA_PREFIX
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+    find_program(NVIDIA_SMI nvidia-smi REQUIRED)
+
+    execute_process(COMMAND "${NVIDIA_SMI}"
+      RESULT_VARIABLE NVIDIA_SMI_RESULT
+      OUTPUT_QUIET
+      ERROR_QUIET)
+
+    if (NOT NVIDIA_SMI_RESULT STREQUAL "0")
+      set(TEST_CUDA_TARGET OFF)
+      message(STATUS "No NVIDIA GPU's found")
+      message(STATUS "Skipping tapir target: cuda")
+    else ()
+      set(TEST_CUDA_TARGET ON)
+      message(STATUS "Testing tapir target: cuda")
+    endif ()
   elseif (tapir_target STREQUAL "hip")
-    set(TEST_HIP_TARGET ON)
+    # It is possible that the hip target has been built, but the device on which
+    # the tests are built (and run) does not have an AMD GPU. In this case, skip
+    # the hip target
+    execute_process(COMMAND "${KIT_CONFIG}" "--hip-prefix"
+      OUTPUT_VARIABLE HIP_PREFIX
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+    find_program(ROCM_SMI rocm-smi REQUIRED)
+
+    execute_process(COMMAND "${ROCM_SMI}"
+      RESULT_VARIABLE ROCM_SMI_RESULT
+      OUTPUT_VARIABLE ROCM_SMI_OUT
+      ERROR_VARIABLE ROCM_SMI_ERR)
+
+    # Of course, rocm-smi will not return an error code if a GPU is not found.
+    # Yes, yes, one can make an argument for why the absence of a GPU is
+    # "normal", but it is not unreasonable to expect "found GPU" to be success
+    # and "GPU not found" to be a failure in a tool like this. Plus, there is
+    # guarantee that this string will not change. (*#&$(@*@!))
+    string(FIND "${ROCM_SMI_OUT}" "Driver not initialized" ERR_OUT)
+    string(FIND "${ROCM_SMI_ERR}" "Driver not initialized" ERR_ERR)
+
+    if (NOT ROCM_SMI_RESULT STREQUAL 0
+        OR NOT ERR_OUT STREQUAL -1
+        OR NOT ERR_ERR STREQUAL -1)
+      set(TEST_HIP_TARGET OFF)
+      message(STATUS "No AMD GPU's found")
+      message(STATUS "Skipping tapir target: hip")
+    else ()
+      set(TEST_HIP_TARGET ON)
+      message(STATUS "Testing tapir target: hip")
+    endif ()
   elseif (tapir_target STREQUAL "lambda")
     set(TEST_LAMBDA_TARGET ON)
   elseif (tapir_target STREQUAL "omptask")
