@@ -51,7 +51,17 @@ function (source_language source lang)
 endfunction ()
 
 # Setup a single-source test for the given tapir target.
-function (kitsune_singlesource_test source lang tapir_target)
+#
+#     source         The absolute path to the source file
+#     lang           The source language
+#     tapir_target   The tapir target. A value of "none" is a special case. It
+#                    will be treated as "not to be built with any tapir target"
+#     cmdargs        A list of command line arguments to be passed when running
+#                    the test
+#     data       A list of files containing that will be used by the test. These
+#                will be copied into the build directory.
+#
+function (kit_singlesource_test source lang tapir_target cmdargs data)
   get_filename_component(base "${source}" NAME_WLE)
   string(REPLACE "." "-" base "${base}")
   if (tapir_target STREQUAL "none")
@@ -62,7 +72,8 @@ function (kitsune_singlesource_test source lang tapir_target)
 
   message(STATUS "Setting up test: ${target}")
   llvm_test_executable_no_test(${target} ${source})
-  llvm_test_run(WORKDIR "%S")
+  llvm_test_run(WORKDIR "%S" "${cmdargs}")
+  llvm_test_data(${target} ${data})
   llvm_add_test_for_target(${target})
 
   if (NOT tapir_target STREQUAL "none")
@@ -80,6 +91,8 @@ function (kitsune_singlesource_test source lang tapir_target)
   if (lang STREQUAL "kokkos")
     target_compile_options(${target} BEFORE PUBLIC
       "-fkokkos" "-fkokkos-no-init")
+    target_link_options(${target} BEFORE PUBLIC
+      "-L/vast/home/tarun/workspace/x86_64/kitsune/install/release/lib/clang/19/lib64/" "-lkokkoscore")
   endif ()
 endfunction()
 
@@ -92,34 +105,36 @@ endfunction()
 #     lang       The source language
 #     cmdargs    A list of command line arguments to be passed when running the
 #                test
+#     data       A list of files containing that will be used by the test. These
+#                will be copied into the build directory.
 #
-function(kitsune_singlesource_all_targets source lang)
+function(kit_singlesource_all_targets source lang cmdargs data)
   if (TEST_CUDA_TARGET)
-    kitsune_singlesource_test(${source} ${lang} "cuda")
+    kit_singlesource_test(${source} ${lang} "cuda" "${cmdargs}" "${data}")
   endif ()
   if (TEST_HIP_TARGET)
-    kitsune_singlesource_test(${source} ${lang} "hip")
+    kit_singlesource_test(${source} ${lang} "hip" "${cmdargs}" "${data}")
   endif()
   if (TEST_LAMBDA_TARGET)
-    kitsune_singlesource_test(${source} ${lang} "lambda")
+    kit_singlesource_test(${source} ${lang} "lambda" "${cmdargs}" "${data}")
   endif ()
   if (TEST_OMPTASK_TARGET)
-    kitsune_singlesource_test(${source} ${lang} "omptask")
+    kit_singlesource_test(${source} ${lang} "omptask" "${cmdargs}" "${data}")
   endif ()
   if (TEST_OPENCILK_TARGET)
-    kitsune_singlesource_test(${source} ${lang} "opencilk")
+    kit_singlesource_test(${source} ${lang} "opencilk" "${cmdargs}" "${data}")
   endif()
   if (TEST_OPENMP_TARGET)
-    kitsune_singlesource_test(${source} ${lang} "openmp")
+    kit_singlesource_test(${source} ${lang} "openmp" "${cmdargs}" "${data}")
   endif ()
   if (TEST_QTHREADS_TARGET)
-    kitsune_singlesource_test(${source} ${lang} "qthreads")
+    kit_singlesource_test(${source} ${lang} "qthreads" "${cmdargs}" "${data}")
   endif ()
   if (TEST_REALM_TARGET)
-    kitsune_singlesource_test(${source} ${lang} "realm")
+    kit_singlesource_test(${source} ${lang} "realm" "${cmdargs}" "${data}")
   endif ()
   if (TEST_SERIAL_TARGET)
-    kitsune_singlesource_test(${source} ${lang} "serial")
+    kit_singlesource_test(${source} ${lang} "serial" "${cmdargs}" "${data}")
   endif ()
 endfunction()
 
@@ -135,8 +150,11 @@ endfunction()
 #     CMDARGS    The list of command line arguments to be passed when running
 #                the test
 #
+#     DATA       A list of files containing data that will be used by the
+#                test. These will be copied to the build directory
+#
 function(kitsune_singlesource)
-  cmake_parse_arguments(KIT "" "" "CMDARGS" ${ARGN})
+  cmake_parse_arguments(KIT "" "" "CMDARGS;DATA" ${ARGN})
   file(GLOB sources
     *.c
     *.cpp *.cc
@@ -149,39 +167,39 @@ function(kitsune_singlesource)
 
     if (lang STREQUAL "cuda")
       if (TEST_CUDA_LANG)
-        kitsune_singlesource_test(${source} ${lang} "none")
+        kit_singlesource_test(${source} ${lang} "none" "${KIT_CMDARGS}" "${KIT_DATA}")
       endif ()
     elseif (lang STREQUAL "hip")
       if (TEST_HIP_LANG)
-        kitsune_singlesource_test(${source} ${lang} "none")
+        kit_singlesource_test(${source} ${lang} "none" "${KIT_CMDARGS}" "${KIT_DATA}")
       endif ()
     elseif (lang STREQUAL "kokkos")
       if (TEST_KOKKOS_LANG)
-        kitsune_singlesource_test(${source} ${lang} "none")
+        kit_singlesource_test(${source} ${lang} "none" "${KIT_CMDARGS}" "${KIT_DATA}")
       endif ()
       if (TEST_KOKKOS_MODE)
         # We only care about testing Kokkos with the GPU-centric targets
         if (TEST_CUDA_TARGET)
-          kitsune_singlesource_test(${source} ${lang} "cuda")
+          kit_singlesource_test(${source} ${lang} "cuda" "${KIT_CMDARGS}" "${KIT_DATA}")
         endif ()
         if (TEST_HIP_TARGET)
-          kitsune_singlesource_test(${source} ${lang} "hip")
+          kit_singlesource_test(${source} ${lang} "hip" "${KIT_CMDARGS}" "${KIT_DATA}")
         endif ()
       endif ()
     elseif (lang STREQUAL "kitc")
       if (TEST_C)
-        kitsune_singlesource_all_targets(${source} ${lang})
+        kit_singlesource_all_targets(${source} ${lang} "${KIT_CMDARGS}" "${KIT_DATA}")
       endif ()
     elseif (lang STREQUAL "kitc++")
       if (TEST_CXX)
-        kitsune_singlesource_all_targets(${source} ${lang})
+        kit_singlesource_all_targets(${source} ${lang} "${KIT_CMDARGS}" "${KIT_DATA}")
       endif ()
     elseif (lang STREQUAL "fortran")
       # Fortran is not yet supported. Complain loudly so we know to change this
       # and take a closer look at everything when Fortran is supported.
       message(FATAL_ERROR "Kitsune does not yet support Fortran: ${source}")
       if (TEST_Fortran)
-        kitsune_singlesource_all_targets(${source} ${lang})
+        kit_singlesource_all_targets(${source} ${lang} "${KIT_CMDARGS}" "${KIT_DATA}")
       endif ()
     else ()
       message(FATAL_ERROR "Testing of file not supported: ${source} [${lang}]")
