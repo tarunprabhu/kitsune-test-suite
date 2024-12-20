@@ -10,16 +10,13 @@ project(kitsune-test-suite)
 set(KITSUNE_C "kitcc")
 set(KITSUNE_CXX "kit++")
 set(KITSUNE_Fortran "kitfc")
-set(KITSUNE_ALL_FRONTENDS
-  "${KITSUNE_C};${KITSUNE_CXX};${KITSUNE_Fortran}")
 
 set(KITSUNE_TEST_FRONTENDS "" CACHE STRING
   "The Kitsune frontends to test. If this is not set, all the built Kitsune \
-frontends will be tested. The allowed values are: ${KITSUNE_ALL_FRONTENDS}")
+frontends will be tested")
 
 set(KITSUNE_SKIP_FRONTENDS "" CACHE STRING
-  "The Kitsune frontends to skip. The allowed values are:
-${KITSUNE_ALL_FRONTENDS}")
+  "The Kitsune frontends to skip")
 
 set(KITSUNE_TEST_TAPIR_TARGETS "" CACHE STRING
   "The tapir targets to test. If this is not set, all Tapir targets enabled in \
@@ -88,7 +85,7 @@ message(STATUS "Kitsune configuration tool: ${KIT_CONFIG}")
 
 # Check that ${CMAKE_C_COMPILER} is the same as the C frontend returned by
 # kit-config
-execute_process(COMMAND ${KIT_CONFIG} "--c-frontend"
+execute_process(COMMAND "${KIT_CONFIG}" --c-frontend
   OUTPUT_VARIABLE KITCC
   OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
@@ -117,7 +114,7 @@ endif ()
 
 # Check that ${CMAKE_CXX_COMPILER} is the same as the C++ frontend returned by
 # kit-config
-execute_process(COMMAND ${KIT_CONFIG} "--c++-frontend"
+execute_process(COMMAND "${KIT_CONFIG}" --c++-frontend
   OUTPUT_VARIABLE KITXX
   OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
@@ -146,7 +143,7 @@ endif ()
 
 # Check that ${CMAKE_Fortran_COMPILER} is the same as the Fortran frontend
 # returned by kit-config
-execute_process(COMMAND ${KIT_CONFIG} "--fortran-frontend"
+execute_process(COMMAND "${KIT_CONFIG}" --fortran-frontend
   OUTPUT_VARIABLE KITFC
   OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
@@ -177,7 +174,52 @@ if (TEST_Fortran)
   message(STATUS "Testing frontend: ${KITSUNE_Fortran}")
 endif ()
 
-execute_process(COMMAND "${KIT_CONFIG}" "--tapir-targets"
+# Sanity check the inputs to KITSUNE_TEST_FRONTENDS and KITSUNE_SKIP_FRONTENDS
+execute_process(COMMAND "${KIT_CONFIG}" --all-frontends
+  OUTPUT_VARIABLE ALL_FRONTENDS_STR
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  COMMAND_ERROR_IS_FATAL ANY)
+string(REPLACE " " ";" ALL_FRONTENDS "${ALL_FRONTENDS_STR}")
+
+foreach (FRONTEND ${KITSUNE_TEST_FRONTENDS})
+  if (NOT FRONTEND IN_LIST ALL_FRONTENDS)
+    message(FATAL_ERROR "Unknown frontend: ${FRONTEND}")
+  endif ()
+endforeach ()
+
+foreach (FRONTEND ${KITSUNE_SKIP_FRONTENDS})
+  if (NOT FRONTEND IN_LIST ALL_FRONTENDS)
+    message(FATAL_ERROR "Unknown frontend: ${FRONTEND}")
+  endif ()
+endforeach ()
+
+# Sanity check the inputs to KITSUNE_TEST_TAPIR_TARGETS and
+# KITSUNE_SKIP_TAPIR_TARGETS
+execute_process(COMMAND "${KIT_CONFIG}" --all-tapir-targets
+  OUTPUT_VARIABLE ALL_TAPIR_TARGETS_STR
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  COMMAND_ERROR_IS_FATAL ANY)
+string(REPLACE " " ";" ALL_TAPIR_TARGETS "${ALL_TAPIR_TARGETS_STR}")
+
+foreach (TAPIR_TARGET ${KITSUNE_TEST_TAPIR_TARGETS})
+  if (NOT ${TAPIR_TARGET} IN_LIST ALL_TAPIR_TARGETS)
+    message(FATAL_ERROR "Unknown tapir target: ${TAPIR_TARGET}")
+  endif ()
+endforeach ()
+
+foreach (TAPIR_TARGET ${KITSUNE_SKIP_TAPIR_TARGETS})
+  if (NOT ${TAPIR_TARGET} IN_LIST ALL_TAPIR_TARGETS)
+    message(FATAL_ERROR "Unknown tapir target: ${TAPIR_TARGET}")
+  endif ()
+endforeach ()
+
+# Sanity check the test input size
+if (NOT KITSUNE_TEST_INPUT_SIZE STREQUAL "default" AND
+    NOT KITSUNE_TEST_INPUT_SIZE STREQUAL "small")
+  message(FATAL_ERROR "Unknown test input size: ${KITSUNE_TEST_INPUT_SIZE}")
+endif ()
+
+execute_process(COMMAND "${KIT_CONFIG}" --tapir-targets
   OUTPUT_VARIABLE TAPIR_TARGETS_STR
   OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
@@ -210,9 +252,10 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
     # It is possible that the cuda target has been built, but the device on
     # which the tests are built (and run) does not have an NVIDIA GPU. In this
     # case, skip the cuda target
-    execute_process(COMMAND "${KIT_CONFIG}" "--cuda-prefix"
+    execute_process(COMMAND "${KIT_CONFIG}" --cuda-prefix
       OUTPUT_VARIABLE CUDA_PREFIX
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      COMMAND_ERROR_IS_FATAL ANY)
 
     find_program(NVIDIA_SMI nvidia-smi REQUIRED)
 
@@ -233,9 +276,10 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
     # It is possible that the hip target has been built, but the device on which
     # the tests are built (and run) does not have an AMD GPU. In this case, skip
     # the hip target
-    execute_process(COMMAND "${KIT_CONFIG}" "--hip-prefix"
+    execute_process(COMMAND "${KIT_CONFIG}" --hip-prefix
       OUTPUT_VARIABLE HIP_PREFIX
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      COMMAND_ERROR_IS_FATAL ANY)
 
     find_program(ROCM_SMI rocm-smi REQUIRED)
 
@@ -283,9 +327,10 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
 endforeach ()
 
 # Testing Kitsune's -fkokkos mode
-execute_process(COMMAND "${KIT_CONFIG}" "--kokkos-mode"
+execute_process(COMMAND "${KIT_CONFIG}" --kokkos-mode
   OUTPUT_VARIABLE KOKKOS_MODE_STR
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  COMMAND_ERROR_IS_FATAL ANY)
 
 # If Kokkos mode has not been enabled in Kitsune, don't test Kokkos at all.
 if (KOKKOS_MODE_STR STREQUAL "ON" AND KITSUNE_TEST_KOKKOS_MODE)
@@ -300,9 +345,10 @@ if (TEST_CUDA_TARGET AND KITSUNE_RUN_ALL)
   # We could use clang to compile the .cu files, but since this is only useful
   # for performance comparisons, use nvcc since that is expected to be the best
   # compiler for cuda code.
-  execute_process(COMMAND "${KIT_CONFIG}" "--cuda-prefix"
+  execute_process(COMMAND "${KIT_CONFIG}" --cuda-prefix
     OUTPUT_VARIABLE CUDA_PREFIX
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
 
   find_program(NVCC nvcc REQUIRED
     PATHS ${CUDA_PREFIX}/bin
@@ -319,9 +365,10 @@ if (TEST_HIP_TARGET AND KITSUNE_RUN_ALL)
   # We could use clang to compile the .hip files, but since this is only useful
   # for performance comparisons, use hipcc since that is expected to be the best
   # compiler for hip code.
-  execute_process(COMMAND ${KIT_CONFIG} "--hip-prefix"
+  execute_process(COMMAND "${KIT_CONFIG}" --hip-prefix
     OUTPUT_VARIABLE HIP_PREFIX
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
 
   find_program(HIPCC hipcc REQUIRED
     PATHS ${HIP_PREFIX}/bin

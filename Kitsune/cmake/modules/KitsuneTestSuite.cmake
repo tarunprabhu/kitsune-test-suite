@@ -76,23 +76,21 @@ function (kit_singlesource_test source lang tapir_target cmdargs data)
   llvm_test_data(${target} ${data})
   llvm_add_test_for_target(${target})
 
+  set(tapir_flags "-ftapir=${tapir_target}")
+  set(kokkos_flags "-fkokkos -fkokkos-no-init")
   if (NOT tapir_target STREQUAL "none")
-    target_compile_options(${target} BEFORE PUBLIC
-      "-ftapir=${tapir_target}")
-    target_link_options(${target} BEFORE PUBLIC
-      "-ftapir=${tapir_target}")
+    target_compile_options(${target} BEFORE PUBLIC "${tapir_flags}")
+    target_link_options(${target} BEFORE PUBLIC "${tapir_flags}")
   endif ()
 
   if (lang STREQUAL "kitc++" OR lang STREQUAL "kokkos")
-    target_compile_options(${target} BEFORE PUBLIC
-      "-fno-exceptions")
+    target_compile_options(${target} BEFORE PUBLIC "-fno-exceptions")
   endif ()
 
+
   if (lang STREQUAL "kokkos")
-    target_compile_options(${target} BEFORE PUBLIC
-      "-fkokkos" "-fkokkos-no-init")
-    target_link_options(${target} BEFORE PUBLIC
-      "-L/vast/home/tarun/workspace/x86_64/kitsune/install/release/lib/clang/19/lib64/" "-lkokkoscore")
+    target_compile_options(${target} BEFORE PUBLIC "${kokkos_flags}")
+    target_link_options(${target} BEFORE PUBLIC "${kokkos_flags}")
   endif ()
 endfunction()
 
@@ -155,6 +153,9 @@ endfunction()
 #
 function(kitsune_singlesource)
   cmake_parse_arguments(KIT "" "" "CMDARGS;DATA" ${ARGN})
+  set(cmdargs "${KIT_CMDARGS}")
+  set(data "${KIT_DATA}")
+
   file(GLOB sources
     *.c
     *.cpp *.cc
@@ -167,39 +168,39 @@ function(kitsune_singlesource)
 
     if (lang STREQUAL "cuda")
       if (TEST_CUDA_LANG)
-        kit_singlesource_test(${source} ${lang} "none" "${KIT_CMDARGS}" "${KIT_DATA}")
+        kit_singlesource_test(${source} ${lang} "none" "${cmdargs}" "${data}")
       endif ()
     elseif (lang STREQUAL "hip")
       if (TEST_HIP_LANG)
-        kit_singlesource_test(${source} ${lang} "none" "${KIT_CMDARGS}" "${KIT_DATA}")
+        kit_singlesource_test(${source} ${lang} "none" "${cmdargs}" "${data}")
       endif ()
     elseif (lang STREQUAL "kokkos")
       if (TEST_KOKKOS_LANG)
-        kit_singlesource_test(${source} ${lang} "none" "${KIT_CMDARGS}" "${KIT_DATA}")
+        kit_singlesource_test(${source} ${lang} "none" "${cmdargs}" "${data}")
       endif ()
       if (TEST_KOKKOS_MODE)
         # We only care about testing Kokkos with the GPU-centric targets
         if (TEST_CUDA_TARGET)
-          kit_singlesource_test(${source} ${lang} "cuda" "${KIT_CMDARGS}" "${KIT_DATA}")
+          kit_singlesource_test(${source} ${lang} "cuda" "${cmdargs}" "${data}")
         endif ()
         if (TEST_HIP_TARGET)
-          kit_singlesource_test(${source} ${lang} "hip" "${KIT_CMDARGS}" "${KIT_DATA}")
+          kit_singlesource_test(${source} ${lang} "hip" "${cmdargs}" "${data}")
         endif ()
       endif ()
     elseif (lang STREQUAL "kitc")
       if (TEST_C)
-        kit_singlesource_all_targets(${source} ${lang} "${KIT_CMDARGS}" "${KIT_DATA}")
+        kit_singlesource_all_targets(${source} ${lang} "${cmdargs}" "${data}")
       endif ()
     elseif (lang STREQUAL "kitc++")
       if (TEST_CXX)
-        kit_singlesource_all_targets(${source} ${lang} "${KIT_CMDARGS}" "${KIT_DATA}")
+        kit_singlesource_all_targets(${source} ${lang} "${cmdargs}" "${data}")
       endif ()
     elseif (lang STREQUAL "fortran")
       # Fortran is not yet supported. Complain loudly so we know to change this
       # and take a closer look at everything when Fortran is supported.
       message(FATAL_ERROR "Kitsune does not yet support Fortran: ${source}")
       if (TEST_Fortran)
-        kit_singlesource_all_targets(${source} ${lang} "${KIT_CMDARGS}" "${KIT_DATA}")
+        kit_singlesource_all_targets(${source} ${lang} "${cmdargs}" "${data}")
       endif ()
     else ()
       message(FATAL_ERROR "Testing of file not supported: ${source} [${lang}]")
