@@ -5,8 +5,6 @@
 #include <kitsune.h>
 #include <vector>
 
-#define ITERATIONS 10
-
 using namespace kitsune;
 
 void matrix_multiplication(mobile_ptr<double> A, mobile_ptr<double> B,
@@ -22,34 +20,24 @@ void matrix_multiplication(mobile_ptr<double> A, mobile_ptr<double> B,
   }
 }
 
-// void matrix_multiplication(const double *A, const double *B, double *C,
-//                            unsigned int M, unsigned int N, unsigned int K) {
-//   forall(unsigned int i = 0; i < M; i++) {
-//     for (unsigned int j = 0; j < N; j++) {
-//       double sum = 0.0;
-//       for (unsigned int k = 0; k < K; k++) {
-//         sum += A[i * K + k] * B[j * K + k]; // B is treated as transposed
-//       }
-//       C[i * N + j] = sum;
-//     }
-//   }
-// }
-
 int main(int argc, char *argv[]) {
   using namespace std;
 
-  size_t m, n, k;
-  unsigned iterations = ITERATIONS;
+  size_t m = 128, n = 128, k = 32;
+  unsigned iterations = 10;
 
-  if (argc <= 3) {
+  if (argc > 5) {
     std::cerr << "Usage: " << argv[0] << " M N K [iteration]\n\n";
     return 1;
   }
-  m = atoi(argv[1]);
-  n = atoi(argv[2]);
-  k = atoi(argv[3]);
-  if (argc >= 5)
+  if (argc > 4)
     iterations = atoi(argv[4]);
+  if (argc > 3)
+    k = atoi(argv[3]);
+  if (argc > 2)
+    n = atoi(argv[2]);
+  if (argc > 1)
+    m = atoi(argv[1]);
 
   cout << setprecision(5);
   cout << "\n";
