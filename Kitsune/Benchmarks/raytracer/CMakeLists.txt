@@ -9,7 +9,7 @@ elseif (KITSUNE_TEST_INPUT_SIZE STREQUAL "small")
   # samples  64
   # width    320
   # height   200
-  kitsune_singlesource(CMDARGS 32 320 200)
+  kitsune_singlesource(CMDARGS 16 320 200)
 else()
   kitsune_singlesource()
 endif()

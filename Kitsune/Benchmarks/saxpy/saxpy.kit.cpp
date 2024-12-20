@@ -24,15 +24,14 @@ int main(int argc, char *argv[]) {
 
   size_t size = 1 << 28;
   unsigned int iterations = 10;
-  if (argc > 1) {
-    size = atol(argv[1]);
-    if (argc == 3)
-      iterations = atoi(argv[2]);
-    else {
-      cout << "usage: saxpy [size] [iterations]\n";
-      return 1;
-    }
+  if (argc > 3) {
+    cout << "usage: saxpy [size] [iterations]\n";
+    return 1;
   }
+  if (argc > 2)
+    iterations = atoi(argv[2]);
+  if (argc > 1)
+    size = atol(argv[1]);
 
   cout << setprecision(5);
   cout << "\n";

@@ -74,10 +74,14 @@ function (kit_singlesource_test source lang tapir_target cmdargs data)
   llvm_test_executable_no_test(${target} ${source})
   llvm_test_run(WORKDIR "%S" "${cmdargs}")
   llvm_test_data(${target} ${data})
+  # timeit adds --append-exitstatus to the test output. We expect that the tests
+  # will perform their own verification and return 0 on success, non-zero on
+  # failure. Since we don't support Windows, we should have grep
+  llvm_test_verify(${GREP} -E "\"^exit 0$\"" %o)
   llvm_add_test_for_target(${target})
 
   set(tapir_flags "-ftapir=${tapir_target}")
-  set(kokkos_flags "-fkokkos -fkokkos-no-init")
+  set(kokkos_flags "-fkokkos;-fkokkos-no-init")
   if (NOT tapir_target STREQUAL "none")
     target_compile_options(${target} BEFORE PUBLIC "${tapir_flags}")
     target_link_options(${target} BEFORE PUBLIC "${tapir_flags}")
