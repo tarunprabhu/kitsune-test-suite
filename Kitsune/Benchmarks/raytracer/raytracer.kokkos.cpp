@@ -1,15 +1,12 @@
+// Raytracer. The output image should be a rendering of the letters LANL.
+
 #include "Kokkos_Core.hpp"
 
-#include <chrono>
-#include <float.h>
+#include <cmath>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <kitsune.h>
-#include <limits.h>
-#include <math.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include <timing.h>
 
 using namespace kitsune;
 
@@ -40,7 +37,7 @@ struct Vec {
 };
 
 KOKKOS_FORCEINLINE_FUNCTION
-float randomVal(unsigned int &x) {
+static float randomVal(unsigned int &x) {
   x = (214013 * x + 2531011);
   return ((x >> 16) & 0x7FFF) / (float)66635;
 }
@@ -49,7 +46,7 @@ float randomVal(unsigned int &x) {
 // space carved by
 // lowerLeft vertex and opposite rectangle vertex upperRight.
 KOKKOS_FORCEINLINE_FUNCTION
-float BoxTest(const Vec &position, Vec lowerLeft, Vec upperRight) {
+static float boxTest(const Vec &position, Vec lowerLeft, Vec upperRight) {
   lowerLeft = position + lowerLeft * -1.0f;
   upperRight = upperRight + position * -1.0f;
   return -fminf(
@@ -64,7 +61,7 @@ float BoxTest(const Vec &position, Vec lowerLeft, Vec upperRight) {
 
 // Sample the world using Signed Distance Fields.
 KOKKOS_FORCEINLINE_FUNCTION
-float QueryDatabase(const Vec &position, int &hitType) {
+static float queryDatabase(const Vec &position, int &hitType) {
   float distance = 1e9; // FLT_MAX;
   Vec f = position;     // Flattened position (z=0)
   f.z = 0;
@@ -90,11 +87,11 @@ float QueryDatabase(const Vec &position, int &hitType) {
 
   float roomDist;
   roomDist =
-      fminf(-fminf(BoxTest(position, Vec(-30.0f, -0.5f, -30.0f),
+      fminf(-fminf(boxTest(position, Vec(-30.0f, -0.5f, -30.0f),
                            Vec(30.0f, 18.0f, 30.0f)),
-                   BoxTest(position, Vec(-25.0f, 17.0f, -25.0f),
+                   boxTest(position, Vec(-25.0f, 17.0f, -25.0f),
                            Vec(25.0f, 20.0f, 25.0f))),
-            BoxTest( // Ceiling "planks" spaced 8 units apart.
+            boxTest( // Ceiling "planks" spaced 8 units apart.
                 Vec(fmodf(fabsf(position.x), 8.0f), position.y, position.z),
                 Vec(1.5f, 18.5f, -25.0f), Vec(6.5f, 20.0f, 25.0f)));
   if (roomDist < distance) {
@@ -112,21 +109,21 @@ float QueryDatabase(const Vec &position, int &hitType) {
 // Perform signed sphere marching
 // Returns hitType 0, 1, 2, or 3 and update hit position/normal
 KOKKOS_FORCEINLINE_FUNCTION
-int RayMarching(const Vec &origin, const Vec &direction, Vec &hitPos,
-                Vec &hitNorm) {
+static int rayMarching(const Vec &origin, const Vec &direction, Vec &hitPos,
+                       Vec &hitNorm) {
   int hitType = HIT_NONE;
   int noHitCount = 0;
 
   // Signed distance marching
   float d; // distance from closest object in world.
   for (float total_d = 0.0f; total_d < 100.0f; total_d += d) {
-    if ((d = QueryDatabase(hitPos = origin + direction * total_d, hitType)) <
+    if ((d = queryDatabase(hitPos = origin + direction * total_d, hitType)) <
             .01f ||
         ++noHitCount > 99) {
       return hitNorm = !Vec(
-                 QueryDatabase(hitPos + Vec(0.01f, 0.00f), noHitCount) - d,
-                 QueryDatabase(hitPos + Vec(0.00f, 0.01f), noHitCount) - d,
-                 QueryDatabase(hitPos + Vec(0.00f, 0.00f, 0.01f), noHitCount) -
+                 queryDatabase(hitPos + Vec(0.01f, 0.00f), noHitCount) - d,
+                 queryDatabase(hitPos + Vec(0.00f, 0.01f), noHitCount) - d,
+                 queryDatabase(hitPos + Vec(0.00f, 0.00f, 0.01f), noHitCount) -
                      d),
              hitType;
     }
@@ -134,8 +131,8 @@ int RayMarching(const Vec &origin, const Vec &direction, Vec &hitPos,
   return 0;
 }
 
-KOKKOS_FORCEINLINE_FUNCTION Vec Trace(Vec origin, Vec direction,
-                                      unsigned int &rn) {
+KOKKOS_FORCEINLINE_FUNCTION static Vec trace(Vec origin, Vec direction,
+                                             unsigned int &rn) {
   Vec sampledPosition;
   Vec normal;
   Vec color(0.0f, 0.0f, 0.0f);
@@ -143,7 +140,7 @@ KOKKOS_FORCEINLINE_FUNCTION Vec Trace(Vec origin, Vec direction,
   Vec lightDirection(!Vec(0.6f, 0.6f, 1.0f)); // Directional light
 
   for (int bounceCount = 8; bounceCount--;) {
-    int hitType = RayMarching(origin, direction, sampledPosition, normal);
+    int hitType = rayMarching(origin, direction, sampledPosition, normal);
     if (hitType == HIT_NONE)
       break; // No hit. This is over, return color.
     else if (hitType ==
@@ -172,7 +169,7 @@ KOKKOS_FORCEINLINE_FUNCTION Vec Trace(Vec origin, Vec direction,
       attenuation = attenuation * 0.2f;
 
       if (incidence > 0.0f &&
-          RayMarching(sampledPosition + normal * 0.1f, lightDirection,
+          rayMarching(sampledPosition + normal * 0.1f, lightDirection,
                       sampledPosition, normal) == HIT_SUN)
         color = color + attenuation * Vec(500, 400, 100) * incidence;
     } else if (hitType == HIT_SUN) { //
@@ -184,8 +181,7 @@ KOKKOS_FORCEINLINE_FUNCTION Vec Trace(Vec origin, Vec direction,
 }
 
 int main(int argc, char **argv) {
-  using namespace std;
-
+  Timer timer("raytracer");
   unsigned int sampleCount = 1 << 7;
   unsigned imageWidth = 1280;
   unsigned imageHeight = 1024;
@@ -198,28 +194,27 @@ int main(int argc, char **argv) {
       sampleCount = atoi(argv[1]);
       imageHeight = atoi(argv[3]);
     } else {
-      cout << "usage: raytracer [#samples] [img-width img-height]\n";
+      std::cout << "usage: raytracer [#samples] [img-width img-height]\n";
       return 1;
     }
   }
-  cout << setprecision(5) << "\n";
-  cout << "---- Raytracer benchmark (kokkos) ----\n"
-       << "  Image size    : " << imageWidth << "x" << imageHeight << "\n"
-       << "  Samples/pixel : " << sampleCount << "\n\n";
 
-  cout << "  Allocating image..." << std::flush;
+  std::cout << "---- Raytracer benchmark (kokkos) ----\n"
+            << "  Image size    : " << imageWidth << "x" << imageHeight << "\n"
+            << "  Samples/pixel : " << sampleCount << "\n\n";
+
+  std::cout << "  Allocating image..." << std::flush;
 
   Kokkos::initialize(argc, argv);
   {
     unsigned int totalPixels = imageWidth * imageHeight;
     mobile_ptr<Pixel> img(totalPixels);
-    Pixel* img_p = img.get();
-    cout << "  done.\n\n";
+    Pixel *img_p = img.get();
+    std::cout << "  done.\n\n";
 
-    cout << "  Starting benchmark..." << std::flush;
+    std::cout << "  Running benchmark ... " << std::flush;
 
-    auto start_time = chrono::steady_clock::now();
-
+    timer.start();
     // clang-format off
     Kokkos::parallel_for(totalPixels, KOKKOS_LAMBDA(const unsigned int i) {
       int x = i % imageWidth;
@@ -238,7 +233,7 @@ int main(int argc, char **argv) {
         float xf = x + randomVal(v);
         float yf = y + randomVal(v);
         color = color +
-          Trace(position,
+          trace(position,
                 !((goal + rand_left) +
                   left * ((xf - imageWidth / 2.0f) + randomVal(v)) +
                   up * ((yf - imageHeight / 2.0f) + randomVal(v))),
@@ -255,26 +250,31 @@ int main(int argc, char **argv) {
     // clang-format on
 
     Kokkos::fence(); // synchronize between host and device.
+    uint64_t ms = timer.stop();
 
-    auto end_time = chrono::steady_clock::now();
-    double elapsed_time =
-        chrono::duration<double>(end_time - start_time).count();
+    std::cout << "done\n";
+    std::cout << "\n\n  Total time: " << ms << " ms\n";
+    std::cout << "  Pixels/millisecond: " << totalPixels / ms << "\n\n";
 
-    cout << "\n\n  Total time: " << elapsed_time << " seconds.\n";
-    cout << "  Pixels/second: " << totalPixels / elapsed_time << ".\n\n";
-
-    cout << "  Saving image...";
+    std::cout << "  Saving image ... " << std::flush;
     std::ofstream img_file;
     img_file.open("raytrace-kokkos-no-view.ppm");
-    img_file << "P6 " << imageWidth << " " << imageHeight << " 255 ";
-    for (int i = totalPixels - 1; i >= 0; i--)
-      img_file << img[i].r << img[i].g << img[i].b;
-    img_file.close();
-    cout << "  done.\n\n"
-         << "*** " << elapsed_time << ", " << elapsed_time << "\n"
-         << "----\n\n";
+    if (img_file.is_open()) {
+      img_file << "P6 " << imageWidth << " " << imageHeight << " 255 ";
+      for (int i = totalPixels - 1; i >= 0; i--)
+        img_file << img[i].r << img[i].g << img[i].b;
+      img_file.close();
+    }
+    std::cout << "done\n";
+
     img.free();
   }
   Kokkos::finalize();
-  return 0;
+
+  // TODO: Actually check that the result is correct.
+  size_t errors = 0;
+
+  json(std::cout, "raytracer", {timer});
+
+  return errors;
 }
