@@ -58,8 +58,8 @@ endfunction ()
 #                    will be treated as "not to be built with any tapir target"
 #     cmdargs        A list of command line arguments to be passed when running
 #                    the test
-#     data       A list of files containing that will be used by the test. These
-#                will be copied into the build directory.
+#     data           A list of files containing that will be used by the test.
+#                    These will be copied into the build directory.
 #
 function (kit_singlesource_test source lang tapir_target cmdargs data)
   get_filename_component(base "${source}" NAME_WLE)
@@ -76,12 +76,21 @@ function (kit_singlesource_test source lang tapir_target cmdargs data)
   llvm_test_data(${target} ${data})
   # timeit adds --append-exitstatus to the test output. We expect that the tests
   # will perform their own verification and return 0 on success, non-zero on
-  # failure. Since we don't support Windows, we should have grep
+  # failure. Since we don't support Windows, we should have grep.
   llvm_test_verify(${GREP} -E "\"^exit 0$\"" %o)
   llvm_add_test_for_target(${target})
 
   set(tapir_flags "-ftapir=${tapir_target}")
   set(kokkos_flags "-fkokkos;-fkokkos-no-init")
+
+  # The include directory in Kitsune/ contains headers for timings and, perhaps,
+  # other things. The timing is only really needed for the benchmarks, but we
+  # might as well tell the compiler to always look in that directory. It is
+  # unlikely that anything there will collide with something that is used by the
+  # tests.
+  target_include_directories(${target} PUBLIC
+    ${CMAKE_SOURCE_DIR}/Kitsune/include)
+
   if (NOT tapir_target STREQUAL "none")
     target_compile_options(${target} BEFORE PUBLIC "${tapir_flags}")
     target_link_options(${target} BEFORE PUBLIC "${tapir_flags}")
@@ -90,7 +99,6 @@ function (kit_singlesource_test source lang tapir_target cmdargs data)
   if (lang STREQUAL "kitc++" OR lang STREQUAL "kokkos")
     target_compile_options(${target} BEFORE PUBLIC "-fno-exceptions")
   endif ()
-
 
   if (lang STREQUAL "kokkos")
     target_compile_options(${target} BEFORE PUBLIC "${kokkos_flags}")

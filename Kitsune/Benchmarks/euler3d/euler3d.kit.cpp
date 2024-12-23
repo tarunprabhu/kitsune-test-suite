@@ -1,9 +1,9 @@
 /// Copyright 2009, Andrew Corrigan, acorriga@gmu.edu
 // This code is from the AIAA-2009-4001 paper
+
 #include <chrono>
 #include <cmath>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <kitsune.h>
 
@@ -40,7 +40,7 @@ struct Float3 {
 
 using namespace kitsune;
 
-inline __attribute__((always_inline)) void
+inline __attribute__((always_inline)) static void
 cpy(mobile_ptr<float> dst, const mobile_ptr<float> src, int N) {
   // clang-format off
   forall(unsigned int i = 0; i < N; i++) {
@@ -49,34 +49,33 @@ cpy(mobile_ptr<float> dst, const mobile_ptr<float> src, int N) {
   // clang-format on
 }
 
-void dump(mobile_ptr<float> variables, int nel, int nelr) {
-  using namespace std;
+static void dump(mobile_ptr<float> variables, int nel, int nelr) {
   {
-    ofstream file("density-forall.dat");
-    file << nel << " " << nelr << endl;
+    std::ofstream file("density-forall.dat");
+    file << nel << " " << nelr << std::endl;
     for (int i = 0; i < nel; i++)
-      file << variables[i + VAR_DENSITY * nelr] << endl;
+      file << variables[i + VAR_DENSITY * nelr] << std::endl;
   }
 
   {
-    ofstream file("momentum-forall.dat");
-    file << nel << " " << nelr << endl;
+    std::ofstream file("momentum-forall.dat");
+    file << nel << " " << nelr << std::endl;
     for (int i = 0; i < nel; i++) {
       for (int j = 0; j != NDIM; j++)
         file << variables[i + (VAR_MOMENTUM + j) * nelr] << " ";
-      file << endl;
+      file << std::endl;
     }
   }
 
   {
-    ofstream file("density_energy-forall.dat");
-    file << nel << " " << nelr << endl;
+    std::ofstream file("density_energy-forall.dat");
+    file << nel << " " << nelr << std::endl;
     for (int i = 0; i < nel; i++)
-      file << variables[i + VAR_DENSITY_ENERGY * nelr] << endl;
+      file << variables[i + VAR_DENSITY_ENERGY * nelr] << std::endl;
   }
 }
 
-inline __attribute__((always_inline)) void
+inline __attribute__((always_inline)) static void
 initialize_variables(int nelr, mobile_ptr<float> variables,
                      mobile_ptr<float> ff_variable) {
   forall(int i = 0; i < nelr; i++) {
@@ -85,7 +84,7 @@ initialize_variables(int nelr, mobile_ptr<float> variables,
   }
 }
 
-inline __attribute__((always_inline)) void compute_flux_contribution(
+inline __attribute__((always_inline)) static void compute_flux_contribution(
     const float density, const Float3 &momentum, const float density_energy,
     const float pressure, Float3 &velocity, Float3 &fc_momentum_x,
     Float3 &fc_momentum_y, Float3 &fc_momentum_z, Float3 &fc_density_energy) {
@@ -107,33 +106,33 @@ inline __attribute__((always_inline)) void compute_flux_contribution(
   fc_density_energy.z = velocity.z * de_p;
 }
 
-inline __attribute__((always_inline)) void
+inline __attribute__((always_inline)) static void
 compute_velocity(float density, const Float3 &momentum, Float3 &velocity) {
   velocity.x = momentum.x / density;
   velocity.y = momentum.y / density;
   velocity.z = momentum.z / density;
 }
 
-inline __attribute__((always_inline)) float
+inline __attribute__((always_inline)) static float
 compute_speed_sqd(const Float3 &velocity) {
   return velocity.x * velocity.x + velocity.y * velocity.y +
          velocity.z * velocity.z;
 }
 
-inline __attribute__((always_inline)) float
+inline __attribute__((always_inline)) static float
 compute_pressure(float density, float density_energy, float speed_sqd) {
   return (float(GAMMA) - float(1.0f)) *
          (density_energy - float(0.5f) * density * speed_sqd);
 }
 
-inline __attribute__((always_inline)) float
+inline __attribute__((always_inline)) static float
 compute_speed_of_sound(float density, float pressure) {
   return sqrtf(float(GAMMA) * pressure / density);
 }
 
-void compute_step_factor(int nelr, const mobile_ptr<float> variables,
-                         const mobile_ptr<float> areas,
-                         mobile_ptr<float> step_factors) {
+static void compute_step_factor(int nelr, const mobile_ptr<float> variables,
+                                const mobile_ptr<float> areas,
+                                mobile_ptr<float> step_factors) {
   forall(int blk = 0; blk < nelr / block_length; ++blk) {
     int b_start = blk * block_length;
     int b_end =
@@ -164,16 +163,15 @@ void compute_step_factor(int nelr, const mobile_ptr<float> variables,
 }
 
 // inline __attribute__((always_inline))
-void compute_flux(int nelr, mobile_ptr<int> elements_surrounding_elements,
-                  mobile_ptr<float> normals,
-                  mobile_ptr<float> variables,
-                  mobile_ptr<float> fluxes,
-                  const mobile_ptr<float> ff_variable,
-                  const Float3 ff_flux_contribution_momentum_x,
-                  const Float3 ff_flux_contribution_momentum_y,
-                  const Float3 ff_flux_contribution_momentum_z,
-                  const Float3 ff_flux_contribution_density_energy) {
-  using namespace std;
+static void compute_flux(int nelr,
+                         mobile_ptr<int> elements_surrounding_elements,
+                         mobile_ptr<float> normals, mobile_ptr<float> variables,
+                         mobile_ptr<float> fluxes,
+                         const mobile_ptr<float> ff_variable,
+                         const Float3 ff_flux_contribution_momentum_x,
+                         const Float3 ff_flux_contribution_momentum_y,
+                         const Float3 ff_flux_contribution_momentum_z,
+                         const Float3 ff_flux_contribution_density_energy) {
   const float smoothing_coefficient = 0.2f;
 
   forall(unsigned int blk = 0; blk < nelr / block_length; ++blk) {
@@ -351,10 +349,10 @@ void compute_flux(int nelr, mobile_ptr<int> elements_surrounding_elements,
   }
 }
 
-void time_step(int j, int nelr, mobile_ptr<float> old_variables,
-               mobile_ptr<float> variables,
-               mobile_ptr<float> step_factors,
-               mobile_ptr<float> fluxes) {
+static void time_step(int j, int nelr, mobile_ptr<float> old_variables,
+                      mobile_ptr<float> variables,
+                      mobile_ptr<float> step_factors,
+                      mobile_ptr<float> fluxes) {
   forall(int blk = 0; blk < nelr / block_length; ++blk) {
     int b_start = blk * block_length;
     int b_end =
@@ -384,10 +382,8 @@ void time_step(int j, int nelr, mobile_ptr<float> old_variables,
  * Main function
  */
 int main(int argc, char **argv) {
-  using namespace std;
-
   if (argc < 2) {
-    cout << "specify data file name" << endl;
+    std::cout << "specify data file name" << std::endl;
     return 0;
   }
 
@@ -395,16 +391,19 @@ int main(int argc, char **argv) {
   if (argc > 2)
     iterations = atoi(argv[2]);
 
+  Timer sf("step_factor");
+  Timer rk("rk");
+
   const char *data_file_name = argv[1];
 
-  cout << setprecision(5);
-  cout << "\n";
-  cout << "---- euler3d benchmark (forall) ----\n\n"
-       << "  Input file : " << data_file_name << "\n"
-       << "  Iterations : " << iterations << ".\n\n";
+  std::cout << "\n";
+  std::cout << "---- euler3d benchmark (forall) ----\n\n"
+            << "  Input file : " << data_file_name << "\n"
+            << "  Iterations : " << iterations << ".\n\n";
 
-  cout << "  Reading input data, allocating arrays, initializing data, etc..."
-       << std::flush;
+  std::cout
+      << "  Reading input data, allocating arrays, initializing data, etc..."
+      << std::flush;
 
   auto total_start_time = chrono::steady_clock::now();
 
@@ -456,9 +455,10 @@ int main(int argc, char **argv) {
   mobile_ptr<int> elements_surrounding_elements;
   mobile_ptr<float> normals;
 
-  ifstream file(data_file_name);
+  std::ifstream file(data_file_name);
   file >> nel;
-  nelr = block_length * ((nel / block_length) + min(1, nel % block_length));
+  nelr =
+      block_length * ((nel / block_length) + std::min(1, nel % block_length));
 
   areas.alloc(nelr);
   elements_surrounding_elements.alloc(nelr * NNB);
@@ -497,9 +497,10 @@ int main(int argc, char **argv) {
 
   // Create arrays and set initial conditions
   mobile_ptr<float> variables(nelr * NVAR);
-  cout << "  done.\n\n";
+  std::cout << "  done.\n\n";
 
-  cout << "  Starting benchmark...\n" << std::flush;
+  std::cout << "  Starting benchmark...\n" << std::flush;
+
   auto start_time = chrono::steady_clock::now();
   initialize_variables(nelr, variables, ff_variable);
   mobile_ptr<float> old_variables(nelr * NVAR);
@@ -557,17 +558,19 @@ int main(int argc, char **argv) {
   }
   double rk_std_dev = sqrt(sum / iterations);
 
-  cout << "\n"
-       << "      Total time : " << total_time << " seconds.\n"
-       << "    Compute time : " << elapsed_time << " seconds.\n"
-       << "            copy : " << copy_total
-       << " seconds (average: " << copy_total / iterations << " seconds).\n"
-       << "              sf : " << sf_total
-       << " seconds (average: " << sf_total / iterations << " seconds).\n"
-       << "              rk : " << rk_total << " seconds (average: " << rk_mean
-       << " seconds / std dev: " << rk_std_dev << ").\n"
-       << "*** " << elapsed_time << ", " << elapsed_time << "\n"
-       << "----\n\n";
+  std::cout << "\n"
+            << "      Total time : " << total_time << " seconds.\n"
+            << "    Compute time : " << elapsed_time << " seconds.\n"
+            << "            copy : " << copy_total
+            << " seconds (average: " << copy_total / iterations
+            << " seconds).\n"
+            << "              sf : " << sf_total
+            << " seconds (average: " << sf_total / iterations << " seconds).\n"
+            << "              rk : " << rk_total
+            << " seconds (average: " << rk_mean
+            << " seconds / std dev: " << rk_std_dev << ").\n"
+            << "*** " << elapsed_time << ", " << elapsed_time << "\n"
+            << "----\n\n";
 
   ff_variable.free();
   areas.free();
