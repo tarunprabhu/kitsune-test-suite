@@ -1,69 +1,71 @@
-// See the README file for details.
-#include <chrono>
+// Test that passing structs to, and returning structs from, device functions
+// on GPUs works as expected
+
 #include <cmath>
-#include <fstream>
+#include <cstring>
 #include <iostream>
 #include <kitsune.h>
 
 using namespace kitsune;
-using namespace std;
-
-const size_t DEFAULT_ARRAY_SIZE = 1024 * 1024;
 
 struct Vec {
   float x, y;
 };
 
-void random_fill(mobile_ptr<Vec> data, size_t N) {
-  for (size_t i = 0; i < N; ++i) {
+static void random_fill(mobile_ptr<Vec> data, size_t n) {
+  for (size_t i = 0; i < n; ++i) {
     data[i].x = rand() / (float)RAND_MAX;
     data[i].y = rand() / (float)RAND_MAX;
   }
 }
 
-__attribute__((noinline)) Vec vec_sum(const Vec &a, const Vec &b) {
+__attribute__((noinline)) static Vec vec_sum(const Vec &a, const Vec &b) {
   Vec sum;
   sum.x = a.x + b.x;
   sum.y = a.y + b.y;
   return sum;
 }
 
-__attribute__((noinline)) void parallel_work(mobile_ptr<Vec> dst,
-                                             const mobile_ptr<Vec> src, int N) {
-  forall(size_t i = 0; i < N; i++) {
+static size_t check(const mobile_ptr<Vec> dst, const mobile_ptr<Vec> src,
+                    const mobile_ptr<Vec> cpy, size_t n) {
+  size_t errors = 0;
+  for (size_t i = 0; i < n; ++i)
+    if (dst[i].x != src[i].x + cpy[i].x || dst[i].y != src[i].y + cpy[i].y)
+      errors += 1;
+  return errors;
+}
+
+int main(int argc, char **argv) {
+  size_t size = 1024 * 1024;
+  if (argc > 1)
+    size = atol(argv[1]);
+
+  mobile_ptr<Vec> dst(size);
+  mobile_ptr<Vec> src(size);
+  mobile_ptr<Vec> cpy(size);
+
+  random_fill(dst, size);
+  random_fill(src, size);
+  std::memcpy(cpy.get(), dst.get(), size * sizeof(Vec));
+
+  // clang-format off
+  forall(size_t i = 0; i < size; i++) {
     Vec sum = vec_sum(dst[i], src[i]);
     dst[i].x = sum.x;
     dst[i].y = sum.y;
   }
-}
+  // clang-format on
 
-__attribute__((noinline)) void print(mobile_ptr<Vec> data, size_t N) {
-  for (size_t i = 0; i < N; i++)
-    printf("(%f %f)", data[i].x, data[i].y);
-  printf("\n\n");
-}
+  std::cout << "\n  Checking final result..." << std::flush;
+  size_t errors = check(dst, src, cpy, size);
+  if (errors)
+    std::cout << "  FAIL! (" << errors << " errors found)\n\n";
+  else
+    std::cout << "  pass\n\n";
 
-int main(int argc, char **argv) {
-  size_t array_size = DEFAULT_ARRAY_SIZE;
-  if (argc >= 2)
-    array_size = atol(argv[1]);
-  fprintf(stdout, "array size: %ld\n", array_size);
+  dst.free();
+  src.free();
+  cpy.free();
 
-  mobile_ptr<Vec> data0(array_size);
-  mobile_ptr<Vec> data1(array_size);
-  random_fill(data0, array_size);
-  random_fill(data1, array_size);
-
-  print(data0, 10);
-  auto start = chrono::steady_clock::now();
-  parallel_work(data1, data0, array_size);
-  print(data1, 10);
-  auto end = chrono::steady_clock::now();
-  cout << "Execution time: " << chrono::duration<double>(end - start).count()
-       << endl;
-
-  data0.free();
-  data1.free();
-
-  return 0;
+  return errors;
 }
