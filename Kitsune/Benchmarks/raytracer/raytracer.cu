@@ -209,7 +209,7 @@ __global__ void Pathtracer(int sampleCount, Pixel *img, int totalPixels,
 }
 
 int main(int argc, char **argv) {
-  Timer timer("raytracer");
+  Timer main("main");
   unsigned int sampleCount = 1 << 7;
   unsigned int imageWidth = 1280;
   unsigned int imageHeight = 1024;
@@ -247,7 +247,7 @@ int main(int argc, char **argv) {
   std::cout << "  done.\n\n";
 
   std::cout << "  Starting benchmark..." << std::flush;
-  timer.start();
+  main.start();
   int threadsPerBlock = 32;
   int blocksPerGrid = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
   Pathtracer<<<blocksPerGrid, threadsPerBlock>>>(sampleCount, img, totalPixels,
@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
             cudaGetErrorString(err));
     exit(EXIT_FAILURE);
   }
-  uint64_t ms = timer.stop();
+  uint64_t ms = main.stop();
 
   std::cout << "done\n";
   std::cout << "\n\n  Total time: " << ms << " ms\n";
@@ -279,7 +279,7 @@ int main(int argc, char **argv) {
   // TODO: Actually check that the result is correct.
   size_t errors = 0;
 
-  json(std::cout, "raytracer", {timer});
+  json(std::cout, "raytracer", {main});
 
   cudaFree(img);
   return errors;

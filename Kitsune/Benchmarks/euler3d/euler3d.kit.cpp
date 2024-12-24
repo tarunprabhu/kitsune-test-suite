@@ -1,11 +1,11 @@
 /// Copyright 2009, Andrew Corrigan, acorriga@gmu.edu
 // This code is from the AIAA-2009-4001 paper
 
-#include <chrono>
 #include <cmath>
 #include <fstream>
 #include <iostream>
 #include <kitsune.h>
+#include <timing.h>
 
 struct Float3 {
   float x, y, z;
@@ -391,6 +391,10 @@ int main(int argc, char **argv) {
   if (argc > 2)
     iterations = atoi(argv[2]);
 
+  Timer main("main");
+  Timer init("init");
+  Timer iters("iters");
+  Timer copy("copy");
   Timer sf("step_factor");
   Timer rk("rk");
 
@@ -405,7 +409,7 @@ int main(int argc, char **argv) {
       << "  Reading input data, allocating arrays, initializing data, etc..."
       << std::flush;
 
-  auto total_start_time = chrono::steady_clock::now();
+  main.start();
 
   // these need to be computed the first time in order to compute time step
   mobile_ptr<float> ff_variable(NVAR);
@@ -501,33 +505,26 @@ int main(int argc, char **argv) {
 
   std::cout << "  Starting benchmark...\n" << std::flush;
 
-  auto start_time = chrono::steady_clock::now();
+  init.start();
   initialize_variables(nelr, variables, ff_variable);
   mobile_ptr<float> old_variables(nelr * NVAR);
   mobile_ptr<float> fluxes(nelr * NVAR);
   mobile_ptr<float> step_factors(nelr);
-  double *rk_times = new double[iterations];
+  init.stop();
 
   // Begin iterations
-  double copy_total = 0.0;
-  double sf_total = 0.0;
-  double rk_total = 0.0;
-
+  iters.start();
   for (int i = 0; i < iterations; i++) {
-    auto copy_start = chrono::steady_clock::now();
+    copy.start();
     cpy(old_variables, variables, nelr * NVAR);
-    auto copy_end = chrono::steady_clock::now();
-    double time = chrono::duration<double>(copy_end - copy_start).count();
-    copy_total += time;
+    copy.stop();
 
     // for the first iteration we compute the time step
-    auto sf_start = chrono::steady_clock::now();
+    sf.start();
     compute_step_factor(nelr, variables, areas, step_factors);
-    auto sf_end = chrono::steady_clock::now();
-    time = chrono::duration<double>(sf_end - sf_start).count();
-    sf_total += time;
+    sf.stop();
 
-    auto rk_start = chrono::steady_clock::now();
+    rk.start();
     for (int j = 0; j < RK; j++) {
       compute_flux(nelr, elements_surrounding_elements, normals, variables,
                    fluxes, ff_variable, ff_flux_contribution_momentum_x,
@@ -536,41 +533,30 @@ int main(int argc, char **argv) {
                    ff_flux_contribution_density_energy);
       time_step(j, nelr, old_variables, variables, step_factors, fluxes);
     }
-    auto rk_end = chrono::steady_clock::now();
-    time = chrono::duration<double>(rk_end - rk_start).count();
-    if (i > 0) {
-      rk_times[i] = time;
-      rk_total += time;
-    }
+    rk.stop();
   }
+  iters.stop();
+  main.stop();
 
   dump(variables, nel, nelr);
 
-  auto end_time = chrono::steady_clock::now();
-  double elapsed_time = chrono::duration<double>(end_time - start_time).count();
-  double total_time =
-      chrono::duration<double>(end_time - total_start_time).count();
-  double rk_mean = rk_total / (iterations - 1);
-  double sum = 0.0;
-  for (int i = 1; i < iterations; i++) {
-    double dist = rk_times[i] - rk_mean;
-    sum += dist * dist;
-  }
-  double rk_std_dev = sqrt(sum / iterations);
-
   std::cout << "\n"
-            << "      Total time : " << total_time << " seconds.\n"
-            << "    Compute time : " << elapsed_time << " seconds.\n"
-            << "            copy : " << copy_total
-            << " seconds (average: " << copy_total / iterations
+            << "      Total time : " << main.total() << " ms\n"
+            << "       Init time : " << init.total() << " ms\n"
+            << "    Compute time : " << iters.total() << " ms\n"
+            << "            copy : " << copy.total()
+            << " seconds (average: " << copy.total() / copy.entries()
             << " seconds).\n"
-            << "              sf : " << sf_total
-            << " seconds (average: " << sf_total / iterations << " seconds).\n"
-            << "              rk : " << rk_total
-            << " seconds (average: " << rk_mean
-            << " seconds / std dev: " << rk_std_dev << ").\n"
-            << "*** " << elapsed_time << ", " << elapsed_time << "\n"
+            << "              sf : " << sf.total()
+            << " seconds (average: " << sf.total() / sf.entries() << " ms)\n"
+            << "              rk : " << rk.total()
+            << " seconds (average: " << rk.total() / rk.entries() << " ms)\n"
             << "----\n\n";
+
+  // TODO: Actually check that the result is correct
+  size_t errors = 0;
+
+  json(std::cout, "euler3d", {main, init, iters, copy, sf, rk});
 
   ff_variable.free();
   areas.free();

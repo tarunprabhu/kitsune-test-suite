@@ -1,12 +1,13 @@
 /// Copyright 2009, Andrew Corrigan, acorriga@gmu.edu
 // This code is from the AIAA-2009-4001 paper
+
 #include "Kokkos_Core.hpp"
-#include <chrono>
+
 #include <cmath>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <kitsune.h>
+#include <timing.h>
 
 struct Float3 {
   float x, y, z;
@@ -45,7 +46,7 @@ using namespace kitsune;
  * Generic functions
  */
 template <typename T>
-void cpy(mobile_ptr<T> dst_p, const mobile_ptr<T> src_p, int N) {
+static void cpy(mobile_ptr<T> dst_p, const mobile_ptr<T> src_p, int N) {
   // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
   // We could try to find a way to make that type Kokkos-friendly, or just wait
   // until the [mobile_ptr] attribute is implemented which should make
@@ -61,7 +62,7 @@ void cpy(mobile_ptr<T> dst_p, const mobile_ptr<T> src_p, int N) {
   Kokkos::fence();
 }
 
-void dump(mobile_ptr<float> variables, int nel, int nelr) {
+static void dump(mobile_ptr<float> variables, int nel, int nelr) {
   {
     std::ofstream file("density-kokkos-noview.dat");
     file << nel << " " << nelr << std::endl;
@@ -87,8 +88,8 @@ void dump(mobile_ptr<float> variables, int nel, int nelr) {
   }
 }
 
-void initialize_variables(int nelr, mobile_ptr<float> variables_p,
-                          const mobile_ptr<float> ff_variable_p) {
+static void initialize_variables(int nelr, mobile_ptr<float> variables_p,
+                                 const mobile_ptr<float> ff_variable_p) {
   // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
   // We could try to find a way to make that type Kokkos-friendly, or just wait
   // until the [mobile_ptr] attribute is implemented which should make
@@ -106,11 +107,10 @@ void initialize_variables(int nelr, mobile_ptr<float> variables_p,
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
-void compute_flux_contribution(const float density, const Float3 &momentum,
-                               const float density_energy, const float pressure,
-                               Float3 &velocity, Float3 &fc_momentum_x,
-                               Float3 &fc_momentum_y, Float3 &fc_momentum_z,
-                               Float3 &fc_density_energy) {
+static void compute_flux_contribution(
+    const float density, const Float3 &momentum, const float density_energy,
+    const float pressure, Float3 &velocity, Float3 &fc_momentum_x,
+    Float3 &fc_momentum_y, Float3 &fc_momentum_z, Float3 &fc_density_energy) {
   fc_momentum_x.x = velocity.x * momentum.x + pressure;
   fc_momentum_x.y = velocity.x * momentum.y;
   fc_momentum_x.z = velocity.x * momentum.z;
@@ -130,32 +130,34 @@ void compute_flux_contribution(const float density, const Float3 &momentum,
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
-void compute_velocity(float density, const Float3 &momentum, Float3 &velocity) {
+static void compute_velocity(float density, const Float3 &momentum,
+                             Float3 &velocity) {
   velocity.x = momentum.x / density;
   velocity.y = momentum.y / density;
   velocity.z = momentum.z / density;
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
-float compute_speed_sqd(const Float3 &velocity) {
+static float compute_speed_sqd(const Float3 &velocity) {
   return velocity.x * velocity.x + velocity.y * velocity.y +
          velocity.z * velocity.z;
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
-float compute_pressure(float density, float density_energy, float speed_sqd) {
+static float compute_pressure(float density, float density_energy,
+                              float speed_sqd) {
   return (float(GAMMA) - float(1.0f)) *
          (density_energy - float(0.5f) * density * speed_sqd);
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
-float compute_speed_of_sound(float density, float pressure) {
+static float compute_speed_of_sound(float density, float pressure) {
   return sqrtf(float(GAMMA) * pressure / density);
 }
 
-void compute_step_factor(int nelr, const mobile_ptr<float> variables_p,
-                         const mobile_ptr<float> areas_p,
-                         mobile_ptr<float> step_factors_p) {
+static void compute_step_factor(int nelr, const mobile_ptr<float> variables_p,
+                                const mobile_ptr<float> areas_p,
+                                mobile_ptr<float> step_factors_p) {
   // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
   // We could try to find a way to make that type Kokkos-friendly, or just wait
   // until the [mobile_ptr] attribute is implemented which should make
@@ -196,16 +198,16 @@ void compute_step_factor(int nelr, const mobile_ptr<float> variables_p,
   Kokkos::fence();
 }
 
-void compute_flux(int nelr,
-                  const mobile_ptr<int> elements_surrounding_elements_p,
-                  const mobile_ptr<float> normals_p,
-                  const mobile_ptr<float> variables_p,
-                  mobile_ptr<float> fluxes_p,
-                  const mobile_ptr<float> ff_variable_p,
-                  const Float3 ff_flux_contribution_momentum_x,
-                  const Float3 ff_flux_contribution_momentum_y,
-                  const Float3 ff_flux_contribution_momentum_z,
-                  const Float3 ff_flux_contribution_density_energy) {
+static void compute_flux(int nelr,
+                         const mobile_ptr<int> elements_surrounding_elements_p,
+                         const mobile_ptr<float> normals_p,
+                         const mobile_ptr<float> variables_p,
+                         mobile_ptr<float> fluxes_p,
+                         const mobile_ptr<float> ff_variable_p,
+                         const Float3 ff_flux_contribution_momentum_x,
+                         const Float3 ff_flux_contribution_momentum_y,
+                         const Float3 ff_flux_contribution_momentum_z,
+                         const Float3 ff_flux_contribution_density_energy) {
   // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
   // We could try to find a way to make that type Kokkos-friendly, or just wait
   // until the [mobile_ptr] attribute is implemented which should make
@@ -402,18 +404,18 @@ void compute_flux(int nelr,
   Kokkos::fence();
 }
 
-void time_step(int j, int nelr, mobile_ptr<float> old_variables_p,
-               mobile_ptr<float> variables_p,
-               mobile_ptr<float> step_factors_p,
-               mobile_ptr<float> fluxes_p) {
+static void time_step(int j, int nelr, mobile_ptr<float> old_variables_p,
+                      mobile_ptr<float> variables_p,
+                      mobile_ptr<float> step_factors_p,
+                      mobile_ptr<float> fluxes_p) {
   // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
   // We could try to find a way to make that type Kokkos-friendly, or just wait
   // until the [mobile_ptr] attribute is implemented which should make
   // Kokkos happy.
-  float* old_variables = old_variables_p.get();
-  float* variables = variables_p.get();
-  float* step_factors = step_factors_p.get();
-  float* fluxes = fluxes_p.get();
+  float *old_variables = old_variables_p.get();
+  float *variables = variables_p.get();
+  float *step_factors = step_factors_p.get();
+  float *fluxes = fluxes_p.get();
 
   // clang-format off
   Kokkos::parallel_for(nelr / block_length, KOKKOS_LAMBDA(const size_t blk) {
@@ -447,28 +449,33 @@ void time_step(int j, int nelr, mobile_ptr<float> old_variables_p,
  * Main function
  */
 int main(int argc, char **argv) {
-  using namespace std;
-
   if (argc < 2) {
-    cout << "specify data file name" << endl;
+    std::cout << "specify data file name" << std::endl;
     return 0;
   }
 
   int iterations = 2000;
   if (argc > 2)
     iterations = atoi(argv[2]);
-
   const char *data_file_name = argv[1];
 
-  cout << setprecision(5);
-  cout << "\n";
-  cout << "---- euler3d benchmark (forall) ----\n\n"
-       << "  Input file : " << data_file_name << "\n"
-       << "  Iterations : " << iterations << ".\n\n";
+  Timer main("main");
+  Timer init("init");
+  Timer iters("iters");
+  Timer copy("copy");
+  Timer sf("step_factor");
+  Timer rk("rk");
 
-  cout << "  Reading input data, allocating arrays, initializing data, etc..."
-       << std::flush;
-  auto total_start_time = chrono::steady_clock::now();
+  std::cout << "\n";
+  std::cout << "---- euler3d benchmark (forall) ----\n\n"
+            << "  Input file : " << data_file_name << "\n"
+            << "  Iterations : " << iterations << ".\n\n";
+
+  std::cout
+      << "  Reading input data, allocating arrays, initializing data, etc..."
+      << std::flush;
+
+  main.start();
 
   mobile_ptr<float> ff_variable(NVAR);
   Float3 ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y,
@@ -517,9 +524,10 @@ int main(int argc, char **argv) {
   mobile_ptr<int> elements_surrounding_elements;
   mobile_ptr<float> normals;
 
-  ifstream file(data_file_name);
+  std::ifstream file(data_file_name);
   file >> nel;
-  nelr = block_length * ((nel / block_length) + min(1, nel % block_length));
+  nelr =
+      block_length * ((nel / block_length) + std::min(1, nel % block_length));
 
   areas.alloc(nelr);
   elements_surrounding_elements.alloc(nelr * NNB);
@@ -558,34 +566,30 @@ int main(int argc, char **argv) {
 
   // Create arrays and set initial conditions
   mobile_ptr<float> variables(nelr * NVAR);
-  cout << "  done.\n\n";
+  std::cout << "  done.\n\n";
 
-  cout << "  Starting benchmark...\n" << std::flush;
-  auto start_time = chrono::steady_clock::now();
+  std::cout << "  Starting benchmark...\n" << std::flush;
+
+  init.start();
   initialize_variables(nelr, variables, ff_variable);
   mobile_ptr<float> old_variables(nelr * NVAR);
   mobile_ptr<float> fluxes(nelr * NVAR);
   mobile_ptr<float> step_factors(nelr);
+  init.stop();
 
-  auto start = chrono::steady_clock::now();
-  double copy_total = 0.0;
-  double sf_total = 0.0;
-  double rk_total = 0.0;
+  iters.start();
   // Begin iterations
   for (int i = 0; i < iterations; i++) {
-
-    auto copy_start = chrono::steady_clock::now();
+    copy.start();
     cpy(old_variables, variables, nelr * NVAR);
-    auto copy_end = chrono::steady_clock::now();
-    copy_total += chrono::duration<double>(copy_end - copy_start).count();
+    copy.stop();
 
     // for the first iteration we compute the time step
-    auto sf_start = chrono::steady_clock::now();
+    sf.start();
     compute_step_factor(nelr, variables, areas, step_factors);
-    auto sf_end = chrono::steady_clock::now();
-    sf_total += chrono::duration<double>(sf_end - sf_start).count();
+    sf.stop();
 
-    auto rk_start = chrono::steady_clock::now();
+    rk.start();
     for (int j = 0; j < RK; j++) {
       compute_flux(nelr, elements_surrounding_elements, normals, variables,
                    fluxes, ff_variable, ff_flux_contribution_momentum_x,
@@ -594,24 +598,25 @@ int main(int argc, char **argv) {
                    ff_flux_contribution_density_energy);
       time_step(j, nelr, old_variables, variables, step_factors, fluxes);
     }
-    auto rk_end = chrono::steady_clock::now();
-    rk_total += chrono::duration<double>(rk_end - rk_start).count();
+    rk.stop();
   }
+  iters.stop();
+  main.stop();
   dump(variables, nel, nelr);
 
-  auto end_time = chrono::steady_clock::now();
-  double elapsed_time = chrono::duration<double>(end_time - start_time).count();
-  double total_time =
-      chrono::duration<double>(end_time - total_start_time).count();
+  std::cout << "\n"
+            << "      Total time : " << main.total() << " ms\n"
+            << "       Init time : " << init.total() << " ms\n"
+            << "    Compute time : " << iters.total() << " ms\n"
+            << "            copy : " << copy.total() << " ms\n"
+            << "              sf : " << sf.total() << " ms\n"
+            << "              rk : " << rk.total() << " ms\n"
+            << "----\n\n";
 
-  cout << "\n"
-       << "      Total time : " << total_time << " seconds.\n"
-       << "    Compute time : " << elapsed_time << " seconds.\n"
-       << "            copy : " << copy_total << " seconds.\n"
-       << "              sf : " << sf_total << " seconds.\n"
-       << "              rk : " << rk_total << " seconds.\n"
-       << "*** " << total_time << ", " << total_time << "\n"
-       << "----\n\n";
+  // TODO: Actually check that the result is correct
+  size_t errors = 0;
 
-  return 0;
+  json(std::cout, "euler3d", {main, init, iters, copy, sf, rk});
+
+  return errors;
 }

@@ -104,6 +104,22 @@ public:
     return ms;
   }
 
+  /// Get the total time recorded by this timer.
+  uint64_t total() const { return stats.total; }
+
+  /// Get the total number of entries recorded by this timer.
+  uint64_t entries() const { return stats.entries; }
+
+  /// Get the minimum time, in milliseconds, recorded by this timer.
+  uint64_t min() const { return stats.min; }
+
+  /// Get the maximum time, in milliseconds, recorded by this timer.
+  uint64_t max() const { return stats.max; }
+
+  /// Get the mean time, in milliseconds (rounded down to the nearest
+  /// millisecond), recorded by this timer
+  uint64_t mean() const { return stats.total / stats.entries; }
+
   /// Print the statistics for this region in JSON format to the given output
   /// stream.
   std::ostream &json(std::ostream &os) const {
