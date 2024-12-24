@@ -1,7 +1,6 @@
 // Raytracer. The output image should be a rendering of the letters LANL.
 
 #include <cmath>
-#include <cuda_runtime.h>
 #include <fstream>
 #include <iostream>
 #include <kitsune.h>
@@ -217,7 +216,7 @@ __global__ void Pathtracer(int sampleCount, Pixel *img, int totalPixels,
 }
 
 int main(int argc, char **argv) {
-  Timer timer("raytracer");
+  Timer main("main");
   unsigned int sampleCount = 1 << 7;
   unsigned int imageWidth = 1280;
   unsigned int imageHeight = 1024;
@@ -253,12 +252,12 @@ int main(int argc, char **argv) {
   int threadsPerBlock = 256;
   int blocksPerGrid = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
 
-  timer.start();
+  main.start();
   hipMemPrefetchAsync(img, totalPixels * sizeof(Pixel), 0, 0);
   hipLaunchKernelGGL(Pathtracer, dim3(blocksPerGrid), dim3(threadsPerBlock), 0,
                      0, sampleCount, img, totalPixels, imageWidth, imageHeight);
   HIPCHECK(hipDeviceSynchronize());
-  uint64_t ms = timer.stop();
+  uint64_t ms = main.stop();
 
   std::cout << "done\n";
   std::cout << "\n\n  Total time: " << ms << " seconds.\n";
@@ -278,7 +277,7 @@ int main(int argc, char **argv) {
   // TODO: Actually check that the result is correct.
   size_t errors = 0;
 
-  json(std::cout, "raytracer", {timer});
+  json(std::cout, "raytracer", {main});
 
   hipFree(img);
   return errors;

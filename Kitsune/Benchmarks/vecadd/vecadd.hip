@@ -1,85 +1,84 @@
-#include <float.h>
-#include <fstream>
 #include <iostream>
-#include <limits.h>
-#include <math.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string>
-#include <time.h>
-#include "hip/hip_runtime.h"
-#include "kitsune/timer.h"
+#include <kitsune.h>
+#include <timing.h>
 
-#define HIPCHECK(error) 				\
-   if (error != hipSuccess) {				\
-     printf("error: '%s' (%d) at %s:%d\n", 		\
-	hipGetErrorString(error), error, __FILE__,      \
-        __LINE__);					\
-     exit(1);						\
-   }							\
-     
+#include "hip/hip_runtime.h"
+
+#define HIPCHECK(error)                                                        \
+  if (error != hipSuccess) {                                                   \
+    printf("error: '%s' (%d) at %s:%d\n", hipGetErrorString(error), error,     \
+           __FILE__, __LINE__);                                                \
+    exit(1);                                                                   \
+  }
+
 const size_t VEC_SIZE = 1024 * 1024 * 256;
 
-void random_fill(float *data, size_t N) {
+static void random_fill(float *data, size_t N) {
   for (size_t i = 0; i < N; ++i)
     data[i] = rand() / (float)RAND_MAX;
 }
 
-__global__ void VectorAdd(float *A, float *B, float *C, size_t N) {
-  size_t i = blockDim.x * blockIdx.x + threadIdx.x;
-  if (i < N)
-    C[i] = A[i] + B[i];
+template <typename T>
+static size_t check(const T *a, const T *b, const T *c, size_t n) {
+  uint64_t errors = 0;
+  for (size_t i = 0; i < n; i++) {
+    float sum = a[i] + b[i];
+    if (c[i] != sum)
+      errors++;
+  }
+  return errors;
 }
 
+__global__ void VectorAdd(float *a, float *b, float *c, size_t n) {
+  size_t i = blockDim.x * blockIdx.x + threadIdx.x;
+  if (i < N)
+    c[i] = a[i] + b[i];
+}
 
 int main(int argc, char *argv[]) {
   size_t size = VEC_SIZE;
-  if (argc > 1 )
+  if (argc > 1)
     size = atol(argv[1]);
+  Timer timer("vecadd");
   fprintf(stdout, "problem size: %ld\n", size);
 
   hipDeviceProp_t devProp;
   hipGetDeviceProperties(&devProp, 0);
 
-
   hipError_t err = hipSuccess;
-  float *A, *B, *C;
-  HIPCHECK(hipMallocManaged(&A, size * sizeof(float)));
-  HIPCHECK(hipMallocManaged(&B, size * sizeof(float))); 
-  HIPCHECK(hipMallocManaged(&C, size * sizeof(float)));
+  float *a, *b, *c;
+  HIPCHECK(hipMallocManaged(&a, size * sizeof(float)));
+  HIPCHECK(hipMallocManaged(&b, size * sizeof(float)));
+  HIPCHECK(hipMallocManaged(&c, size * sizeof(float)));
 
   random_fill(A, size);
   random_fill(B, size);
 
   // This is loosely for consistency with the launch parameters
   // from kitsune.
-  kitsune::timer r;  
-  int threadsPerBlock = 256;
-  int blocksPerGrid = (size + threadsPerBlock - 1) / threadsPerBlock;
-  kitsune::timer k;
-  hipMemPrefetchAsync(A, size * sizeof(float), 0, 0);
-  hipMemPrefetchAsync(B, size * sizeof(float), 0, 0);
-  hipMemPrefetchAsync(C, size * sizeof(float), 0, 0);      
-  hipLaunchKernelGGL(VectorAdd, blocksPerGrid, threadsPerBlock, 0, 0, A, B, C, size);
-  HIPCHECK(hipDeviceSynchronize());
-  double ktime = k.seconds(); 
-  fprintf(stdout, "kernel: %7lg\n", ktime);
+  for (size_t i = 0; i < 10; ++i) {
+    timer.start();
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (size + threadsPerBlock - 1) / threadsPerBlock;
+    hipMemPrefetchAsync(a, size * sizeof(float), 0, 0);
+    hipMemPrefetchAsync(b, size * sizeof(float), 0, 0);
+    hipMemPrefetchAsync(c, size * sizeof(float), 0, 0);
+    hipLaunchKernelGGL(VectorAdd, blocksPerGrid, threadsPerBlock, 0, 0, a, b, c,
+                       size);
+    HIPCHECK(hipDeviceSynchronize());
+    uint64_t ms = timer.stop();
 
-  // Sanity check the results...
-  size_t error_count = 0;
-  for (size_t i = 0; i < size; i++) {
-    float sum = A[i] + B[i];
-    if (C[i] != sum)
-      error_count++;
+    fprintf(stdout, "kernel: %7ld ms\n", ms);
   }
 
-  if (error_count != 0)
-    printf("bad result!\n");
-  else {
-    double rtime = r.seconds();
-    fprintf(stdout, "total runtime: %7lg\n", rtime);
-  }
+  std::cout << "\n  Checking final result..." << std::flush;
+  size_t errors = check(a, b, c, size);
+  if (errors)
+    std::cout << "  FAIL! (" << errors << " errors found)\n\n";
+  else
+    std::cout << "  pass\n\n";
 
-  return 0;
+  json(std::cout, "vecadd", {timer});
+
+  return errors;
 }

@@ -181,7 +181,7 @@ KOKKOS_FORCEINLINE_FUNCTION static Vec trace(Vec origin, Vec direction,
 }
 
 int main(int argc, char **argv) {
-  Timer timer("raytracer");
+  Timer main("main");
   unsigned int sampleCount = 1 << 7;
   unsigned imageWidth = 1280;
   unsigned imageHeight = 1024;
@@ -214,7 +214,7 @@ int main(int argc, char **argv) {
 
     std::cout << "  Running benchmark ... " << std::flush;
 
-    timer.start();
+    main.start();
     // clang-format off
     Kokkos::parallel_for(totalPixels, KOKKOS_LAMBDA(const unsigned int i) {
       int x = i % imageWidth;
@@ -250,7 +250,7 @@ int main(int argc, char **argv) {
     // clang-format on
 
     Kokkos::fence(); // synchronize between host and device.
-    uint64_t ms = timer.stop();
+    uint64_t ms = main.stop();
 
     std::cout << "done\n";
     std::cout << "\n\n  Total time: " << ms << " ms\n";
@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
   // TODO: Actually check that the result is correct.
   size_t errors = 0;
 
-  json(std::cout, "raytracer", {timer});
+  json(std::cout, "raytracer", {main});
 
   return errors;
 }

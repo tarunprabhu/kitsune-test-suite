@@ -176,7 +176,7 @@ inline __attribute__((always_inline)) Vec trace(Vec origin, Vec direction,
 }
 
 int main(int argc, char **argv) {
-  Timer timer("raytracer");
+  Timer main("main");
   unsigned int sampleCount = 1 << 7;
   unsigned int imageWidth = 1280;
   unsigned int imageHeight = 1024;
@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
 
   std::cout << "  Running benchmark ... " << std::flush;
 
-  timer.start();
+  main.start();
   forall(unsigned int i = 0; i < totalPixels; ++i) {
     int x = i % imageWidth;
     int y = i / imageWidth;
@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
     img[i].g = (unsigned char)color.y;
     img[i].b = (unsigned char)color.z;
   }
-  uint64_t ms = timer.stop();
+  uint64_t ms = main.stop();
 
   std::cout << "done\n";
   std::cout << "\n\n  Total time: " << ms << " ms\n";
@@ -257,7 +257,7 @@ int main(int argc, char **argv) {
   // TODO: Actually check that the result is correct.
   size_t errors = 0;
 
-  json(std::cout, "raytracer", {timer});
+  json(std::cout, "raytracer", {main});
 
   img.free();
   return errors;

@@ -51,8 +51,9 @@ int main(int argc, char *argv[]) {
   float D;
   mobile_ptr<float> c;
   float lambda;
-  Timer compute("compute");
-  Timer init3("init3");
+  Timer main("main");
+  Timer init("init");
+  Timer iters("iters");
   Timer loop1("loop1");
   Timer loop2("loop2");
 
@@ -112,8 +113,8 @@ int main(int argc, char *argv[]) {
 
   std::cout << "  Running benchmark...\n" << std::flush;
 
-  compute.start();
-  init3.start();
+  main.start();
+  init.start();
   // clang-format off
   forall(int i = 0; i < rows; i++) {
     iN[i] = i - 1;
@@ -138,8 +139,9 @@ int main(int argc, char *argv[]) {
     J[k] = (float)exp(I[k]);
   }
   // clang-format on
-  init3.stop();
+  init.stop();
 
+  iters.start();
   for (int iter = 0; iter < niter; iter++) {
     float sum = 0, sum2 = 0;
 
@@ -205,7 +207,8 @@ int main(int argc, char *argv[]) {
     }
     loop2.stop();
   }
-  compute.stop();
+  iters.stop();
+  main.stop();
 
   // TODO: Actually check that the output is correct.
   size_t errors = 0;
@@ -216,7 +219,7 @@ int main(int argc, char *argv[]) {
     fclose(fp);
   }
 
-  json(std::cout, "srad", {compute, init3, loop1, loop2});
+  json(std::cout, "srad", {main, init, iters, loop1, loop2});
 
   return 0;
 }
