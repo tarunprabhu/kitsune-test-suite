@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     else
       std::cout << "  pass\n\n";
 
-    json(std::cout, "copy", {timer});
+    json(std::cout, {timer});
 
     src.free();
     dst.free();

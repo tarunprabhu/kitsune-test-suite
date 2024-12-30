@@ -265,7 +265,7 @@ int main(int argc, char **argv) {
         img_file << img[i].r << img[i].g << img[i].b;
       img_file.close();
     }
-    std::cout << "done\n";
+    std::cout << "done\n\n";
 
     img.free();
   }
@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
   // TODO: Actually check that the result is correct.
   size_t errors = 0;
 
-  json(std::cout, "raytracer", {main});
+  json(std::cout, {main});
 
   return errors;
 }

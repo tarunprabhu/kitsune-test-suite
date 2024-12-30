@@ -219,7 +219,7 @@ int main(int argc, char *argv[]) {
     fclose(fp);
   }
 
-  json(std::cout, "srad", {main, init, iters, loop1, loop2});
+  json(std::cout, {main, init, iters, loop1, loop2});
 
   return 0;
 }

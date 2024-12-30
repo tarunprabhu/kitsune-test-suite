@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
     std::cout << "  pass\n\n";
   }
 
-  json(std::cout, "saxpy", {init, saxpy});
+  json(std::cout, {init, saxpy});
 
   x.free();
   y.free();

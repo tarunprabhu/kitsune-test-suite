@@ -616,7 +616,7 @@ int main(int argc, char **argv) {
   // TODO: Actually check that the result is correct
   size_t errors = 0;
 
-  json(std::cout, "euler3d", {main, init, iters, copy, sf, rk});
+  json(std::cout, {main, init, iters, copy, sf, rk});
 
   return errors;
 }
