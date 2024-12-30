@@ -138,10 +138,9 @@ public:
 /// will print the statistics in JSON format with some sentinels on either
 /// side. A post-processing script can scrape the results by looking for the
 /// sentinels. The name is usually the name of the benchmark.
-std::ostream &json(std::ostream &os, const std::string &name,
-                   const std::vector<Timer> &timers) {
+static std::ostream &json(std::ostream &os, const std::vector<Timer> &timers) {
   os << "<json>" << std::endl;
-  os << "\"" << name << "\": [" << std::endl;
+  os << "{" << std::endl;
   if (timers.size()) {
     timers.front().json(os);
     for (size_t i = 1; i < timers.size(); ++i) {
@@ -149,7 +148,7 @@ std::ostream &json(std::ostream &os, const std::string &name,
       timers.at(i).json(os);
     }
   }
-  os << "\n]" << std::endl;
+  os << std::endl << "}" << std::endl;
   os << "</json>" << std::endl;
   return os;
 }

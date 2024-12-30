@@ -400,5 +400,11 @@ add_subdirectory(SingleSource)
 # all.
 # add_subdirectory(MultiSource)
 
+add_subdirectory(utils)
+
 file(COPY lit.local.cfg DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-file(COPY run-kitsune-tests DESTINATION "${CMAKE_BINARY_DIR}")
+
+# Use configure_file instead of file(COPY) because that will ensure that the
+# file will be copied when it is changed. Unlike lit.local.cfg, this will change
+# during development.
+configure_file(run-tests ${CMAKE_CURRENT_BINARY_DIR}/run-tests COPYONLY)

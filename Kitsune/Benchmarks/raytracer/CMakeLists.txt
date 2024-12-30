@@ -1,5 +1,7 @@
 include(KitsuneTestSuite)
 
+file(COPY lit.local.cfg DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
 if (KITSUNE_TEST_INPUT_SIZE STREQUAL "default")
   # samples  128
   # width    1280

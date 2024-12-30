@@ -1,5 +1,7 @@
 include(KitsuneTestSuite)
 
+file(COPY lit.local.cfg DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
 set(input fvcorr.domn.193K)
 if (KITSUNE_TEST_INPUT_SIZE STREQUAL "default")
   # file          fvcorr.domn.193k

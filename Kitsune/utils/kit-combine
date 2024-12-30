@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+
+import argparse as ap
+import json
+import os
+import math
+import re
+import sys
+
+# The regular expression to extract the name of the test and the tapir target
+# from the name of the test script file. The name of the test is the first
+# match, the tapir target is the third.
+re_kit_test = re.compile('^(.+)-(kit|kokkos)-(.+)[.]test$')
+
+# Get the test name. The argument is a path to a .test file. In the case of a
+# Benchmark or MultiSource test, the test name will be the name of the directory
+# containing the .test file. For tests in the SingleSource directory, the base
+# name will be of the form <test-name>-kit-<tapir-target>.test. Everything in
+# the Kitsune/SingleSource directory is guaranteed to be a Kitsune test
+def get_name(base: str) -> str:
+    if base.startswith('Kitsune/Benchmarks') or \
+       base.startswith('Kitsune/MultiSource'):
+        return os.path.basename(os.path.dirname(base))
+    elif base.startswith('Kitsune/SingleSource'):
+        b = os.path.basename(base)
+        m = re_kit_test.match(b)
+        if not m:
+            sys.exit(f'Unexpected single-source test name: {b}')
+        return m[1]
+    else:
+        sys.exit(f'Unexpected prefix in test base name: {base}')
+
+# Get the tapir target from test name. The argument is a path to a .test file.
+# If the test is a "Kokkos" test i.e. one where we recognize Kokkos constructs
+# and compile them differently, the tapir target will have Kokkos prepended to
+# it. Yes, it's not great, but the alternatives are even more complicated.
+def get_tapir_target(base: str) -> str:
+    b = os.path.basename(base)
+    m = re_kit_test.match(b)
+    if not m:
+        sys.exit(f'Could not get tapir target from test name: {base}')
+    if m[2] == 'kokkos':
+        return 'kokkos-' + m[3]
+    return m[3]
+
+# Get the compile time. For now, this only works for single-source tests.
+def get_compile_time(build_dir: str, base: str) -> int:
+    d = os.path.dirname(os.path.join(build_dir, base))
+    b = re.sub('[.]test$', '', os.path.basename(base))
+    objdir = os.path.join(d, 'CMakeFiles', b + '.dir')
+
+    # Only return a time if there is a single timing file in the directory.
+    # This will be the case of single-source tests. For multi-source tests,
+    # there is currently no good way to determine the timing of the whole test.
+    time = 0.0
+    files = [f for f in os.listdir(objdir) if f.endswith('.o.time')]
+    if len(files) == 1:
+        with open(os.path.join(objdir, files[0]), 'r') as f:
+            for line in f:
+                if line.startswith('real'):
+                    time = float(line.split(' ')[-1].strip())
+    # The time is recorded in seconds. But the per-kernel timings are in
+    # milliseconds. To keep things consistent, report this in milliseconds
+    return math.ceil(time * 1000)
+
+# Get the link time.
+def get_link_time(build_dir: str, base: str) -> int:
+    d = os.path.dirname(os.path.join(build_dir, base))
+    name = re.sub('[.]test$', '', os.path.basename(base))
+    time = 0.0
+    with open(os.path.join(d, name + '.link.time'), 'r') as f:
+        for line in f:
+            if line.startswith('real'):
+                time = float(line.split(' ')[-1].strip())
+    # The time is recorded in seconds. But the per-kernel timings are in
+    # milliseconds. To keep things consistent, report this in milliseconds
+    return math.ceil(time * 1000)
+
+# Process the output file from a benchmark test and add it to the given data
+# object.
+def parse_output_into(build_dir: str, base: str, data) -> None:
+    test_file = os.path.join(build_dir, base)
+    odir = os.path.join(os.path.dirname(test_file), 'Output')
+    ofile = os.path.join(odir, os.path.basename(test_file) + '.out')
+    lines = []
+    with open(ofile, 'r') as f:
+        record = False
+        for line in f:
+            if line == '<json>\n':
+                record = True
+            elif line == '</json>\n':
+                record = False
+            elif record:
+                lines.append(line.strip())
+    data['times'] = json.loads('\n'.join(lines))
+
+# Process the report file and generate the combined report.
+def process(report_file: str, build_dir: str):
+    combined = {}
+
+    # If the test-suite was run with the provided run-kitsune-tests script, the
+    # CPU and GPU information on the test platform will have been saved to a
+    # file named platform.json alongside the report.json file. This is optional,
+    # so use it if it is found, but ignore it otherwise.
+    parent = os.path.dirname(report_file)
+    platform = os.path.join(parent, 'platform.json')
+    if os.path.exists(platform):
+        with open(platform, 'r') as f:
+            combined = json.load(f)
+
+    combined['tests'] = {}
+    tts = set([])
+    j = None
+    with open(report_file, 'r') as f:
+        j = json.load(f)
+
+    for test in j['tests']:
+        # The name of the test suite always starts with "test-suite :: "
+        base = test['name'].replace('test-suite :: ', '')
+        name = get_name(base)
+        if name not in combined['tests']:
+            combined['tests'][name] = {}
+
+        tt = get_tapir_target(base)
+        tts.add(tt)
+
+        data = {}
+
+        # We can't use the compile and link times from the main report because
+        # the values there are determined by looking for timing files that have
+        # a prefix that matches the test name. Because we compile the same
+        # source file multiple times with different tapir targets, the names of
+        # the timing files generally will not match. We can only get reasonable
+        # compile times for single-source files because the test suite will
+        # build everything in parallel and may simultaneously build object files
+        # for unrelated tests. Simply adding up the times for each object file
+        # in a multi-source file will not give an accurate value for the
+        # compile time.
+        # TODO: We could do get a reasonable value for the link time of a
+        # multi-source test, so we should do that at some point.
+        data['compile-time'] = get_compile_time(build_dir, base)
+        data['link-time'] = get_link_time(build_dir, base)
+        data['size'] = test['metrics']['size']
+
+        if base.startswith('Kitsune/Benchmarks'):
+            parse_output_into(build_dir, base, data)
+
+        combined['tests'][name][tt] = data
+
+    combined['targets'] = sorted(tts)
+    return combined
+
+# Sanity check the command line arguments. Returns nothing if successful,
+# terminates the program with an error otherwise.
+def sanity_check(args):
+    if not os.path.exists(args.report):
+        sys.exit(f'Could not find report: {args.report}')
+
+    # Make a reasonable attempt at checking the build directory.
+    build_dir = args.build_dir
+    if not build_dir:
+        build_dir = os.path.dirname(args.report)
+
+    if not os.path.exists(build_dir):
+        sys.exit(f'Could not find build directory: {build_dir}')
+
+    if not os.path.isdir(build_dir):
+        sys.exit(f'Path is not a directory: {build_dir}')
+
+# Parse the command line arguments. Returns the parsed object if parsing was
+# successful. Will terminate the program with an error message otherwise.
+def parse_command_line_args():
+    prog = 'kit-combine'
+    descr = (
+        'Combine Kitsune test suite reports. When the test suite is run, the'
+        'the "interesting" reports are spread across several files. This will'
+        'generate a combined report, in JSON, with data collected from the '
+        'various files. Not all of the data from the various files will be '
+        'included in the result'
+    )
+
+    parser = ap.ArgumentParser(prog = prog, description = descr)
+    parser.add_argument(
+        '-o',
+        '--output',
+        type = str,
+        default = None,
+        dest = 'outfile',
+        metavar = '<file>',
+        help = 'Write the combined report to a file instead of stdout'
+    )
+    parser.add_argument(
+        '-b'
+        '--build-dir',
+        type = str,
+        default = None,
+        dest = 'build_dir',
+        metavar = '<dir>',
+        help =
+        'Path to the root of the build directory where the test suite is built '
+        'and run'
+    )
+    parser.add_argument(
+        'report',
+        type = str,
+        help =
+        'Path to the "top-level" report produced when running the test-suite. '
+        'This is assumed to be present in the Kitsune subdirectory which is '
+        'of the top-level test-suite build directory. If it is not, the -b '
+        'option should be provided'
+    )
+
+    return parser.parse_args()
+
+def main():
+    args = parse_command_line_args()
+    sanity_check(args)
+
+    build_dir = args.build_dir
+    if not build_dir:
+        # args.report will be in ${test_suite}/Kitsune. We want build_dir to
+        # be ${test_suite}
+        build_dir = os.path.dirname(os.path.dirname(args.report))
+
+    combined = process(args.report, build_dir)
+    pretty = json.dumps(combined, sort_keys=True, indent=2)
+    if args.outfile:
+        with open(args.outfile, 'w') as f:
+            f.write(pretty)
+            f.write('\n')
+    else:
+        print(pretty)
+
+if __name__ == '__main__':
+    exit(main())

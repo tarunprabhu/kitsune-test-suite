@@ -279,7 +279,7 @@ int main(int argc, char **argv) {
   // TODO: Actually check that the result is correct.
   size_t errors = 0;
 
-  json(std::cout, "raytracer", {main});
+  json(std::cout, {main});
 
   cudaFree(img);
   return errors;

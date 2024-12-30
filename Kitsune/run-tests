@@ -1,0 +1,126 @@
+#!/usr/bin/env sh
+#
+# There might be some way of passing options to lit via a config file, but I
+# haven't found it if it exists. This script cannot be used on Windows, but we
+# don't support Windows in Kitsune anyway.
+
+usage="
+Run the Kitsune tests. This passes the right options to lit.
+
+  USAGE
+
+      run-tests [-b <dir>][-h]
+
+  OPTIONS
+
+      -h          Show help and exit
+
+      -o <file>   Where to write the combined report. If this is not given, it
+                  will be written to report.json in the root of the test suite
+
+      -b <dir>    The Kitsune build directory. This is useful if we strictly
+                  need the llvm-lit executable that is present there. Otherwise,
+                  the lit executable from $PATH will be used
+"
+
+# This will be the Kitsune/ subdirectory within the root of the llvm-test-suite
+# build directory
+kitsune=$(dirname $0)
+test_suite=$(dirname "${kitsune}")
+
+build_dir=""
+outfile="${kitsune}/report.json"
+
+while getopts "b:o:" opt; do
+    case "${opt}" in
+        b)
+            build_dir="${OPTARG}"
+            ;;
+        h)
+            echo "${usage}"
+            exit 0
+            ;;
+        o)
+            outfile="${OPTARG}"
+            ;;
+    esac
+done
+
+lit=
+if [ -n "${build_dir}" ]; then
+    lit=${build_dir}/bin/llvm-lit
+else
+    lit=$(command -v lit)
+fi
+
+if [ -z "${lit}" ] || ! [ -x "${lit}" ]; then
+   echo "Could not find suitable lit executable"
+   exit 1
+fi
+
+# The kitsune tests must be run in sequence. Some CPU tapir targets like
+# OpenCilk will use all the cores on the system by default. Running tests in
+# parallel under such conditions is usually undesirable. Similarly, running the
+# tests with GPU tapir targets in parallel will cause contention on the GPU
+# which is not ideal either. It may be ok on a multi-gpu system, but for now, we
+# don't check for that. The user can always use lit directly in those cases.
+${lit} -j 1 -o ${kitsune}/ts-report.json ${kitsune}
+
+# It is unlikely that there will be CPU's with different models on the test
+# node. But if that does happen, we don't really care since this is only
+# intended to be informational.
+cpu="<<UNKNOWN>>"
+cores="0"
+if ls -l /proc/cpuinfo > /dev/null 2>&1; then
+    cpu=$(cat /proc/cpuinfo \
+              | grep "model name" \
+              | sed 's/model name\s*:\s*//g' \
+              | sort \
+              | uniq)
+    cores=$(cat /proc/cpuinfo \
+                | grep "processor" \
+                | sed 's/processor\s*:\s*//g' \
+                | wc -l)
+else
+    echo "Looking up CPU info on non-Linux platforms not implemented"
+fi
+
+nvidia_smi=$(command -v nvidia-smi)
+if [ $? -ne 0 ]; then
+    nvidia_smi=""
+fi
+
+rocm_smi=$(command -v rocm-smi)
+if [ $? -ne 0 ]; then
+    rocm_smi=""
+fi
+
+gpu="<<NOT FOUND>>"
+if [ -n "${nvidia_smi}" ]; then
+    echo "NOT IMPLEMENTED: Parsing output of nvidia-smi"
+elif [ -n "${rocm_smi}" ]; then
+    echo "NOT IMPLEMENTED: Parsing output of rocm-smi"
+fi
+
+date=$(date --rfc-3339=seconds)
+
+platform="{
+  \"cpu\": {
+    \"model\": \"${cpu}\",
+    \"cores\": ${cores}
+  },
+  \"gpu\": {
+    \"model\": \"${gpu}\"
+  },
+  \"date\": \"${date}\"
+}"
+
+echo "${platform}" > ${kitsune}/platform.json
+
+# Generate the combined report. There is no reason to do this as a separate
+# step. It can always be done separately if needed. The -b option must be given
+# the root of the test suite. The test
+${kitsune}/utils/kit-combine \
+     -b "${test_suite}" \
+     -o "${outfile}" \
+     "${kitsune}/ts-report.json"

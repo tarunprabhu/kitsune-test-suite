@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
   else
     std::cout << "  pass\n\n";
 
-  json(std::cout, "vecadd", {timer});
+  json(std::cout, {timer});
 
   a.free();
   b.free();
