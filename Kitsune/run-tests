@@ -16,7 +16,8 @@ Run the Kitsune tests. This passes the right options to lit.
       -h          Show help and exit
 
       -o <file>   Where to write the combined report. If this is not given, it
-                  will be written to report.json in the root of the test suite
+                  will be written to report.json in the Kistune/ subdirectory of
+                  the test suite
 
       -b <dir>    The Kitsune build directory. This is useful if we strictly
                   need the llvm-lit executable that is present there. Otherwise,
@@ -31,7 +32,7 @@ test_suite=$(dirname "${kitsune}")
 build_dir=""
 outfile="${kitsune}/report.json"
 
-while getopts "b:o:" opt; do
+while getopts "b:ho:" opt; do
     case "${opt}" in
         b)
             build_dir="${OPTARG}"
@@ -58,13 +59,16 @@ if [ -z "${lit}" ] || ! [ -x "${lit}" ]; then
    exit 1
 fi
 
-# The kitsune tests must be run in sequence. Some CPU tapir targets like
+# The kitsune tests must be run sequentially. Some CPU tapir targets like
 # OpenCilk will use all the cores on the system by default. Running tests in
 # parallel under such conditions is usually undesirable. Similarly, running the
 # tests with GPU tapir targets in parallel will cause contention on the GPU
 # which is not ideal either. It may be ok on a multi-gpu system, but for now, we
 # don't check for that. The user can always use lit directly in those cases.
-${lit} -j 1 -o ${kitsune}/ts-report.json ${kitsune}
+#
+# TODO: It is not clear that we need NO_STOP_MESSAGE=1 for the Fortran tests,
+# but keep it for now. We will definitely want to revisit this at some point.
+NO_STOP_MESSAGE=1 ${lit} -j 1 -o ${kitsune}/ts-report.json ${kitsune}
 
 # It is unlikely that there will be CPU's with different models on the test
 # node. But if that does happen, we don't really care since this is only
@@ -87,6 +91,7 @@ fi
 
 nvidia_smi=$(command -v nvidia-smi)
 if [ $? -ne 0 ]; then
+
     nvidia_smi=""
 fi
 
@@ -95,14 +100,37 @@ if [ $? -ne 0 ]; then
     rocm_smi=""
 fi
 
-gpu="<<NOT FOUND>>"
+# There could be more than one GPU on the machine. It would be good to determine
+# which one was actually used, but at the time of writing, we cannot. It is
+# unlikely that the suite will be run on a node with a variety of different
+# GPU's on it. The more likely case is that there are multiple devices of the
+# same model. Optimize for that scenario but be flexible enough to record all
+# the GPU's if that is not the case.
+gpu=""
+devices=0
 if [ -n "${nvidia_smi}" ]; then
-    echo "NOT IMPLEMENTED: Parsing output of nvidia-smi"
+    devices=$(nvidia-smi -L | wc -l)
+    gpu=$(nvidia-smi -L \
+                  | sed -E 's/GPU[ ]*[0-9]+:[ ]*//g' \
+                  | sed -E 's/[ ]*[(]UUID:[ ]*.+[)]//g' \
+                  | sort \
+                  | uniq \
+                  | tr '\n' ';' \
+                  | sed -E 's/;$//g')
 elif [ -n "${rocm_smi}" ]; then
-    echo "NOT IMPLEMENTED: Parsing output of rocm-smi"
+    devices=$(rocm-smi -i | wc -l)
+    gpu=$(rocm-smi -i \
+              | grep "Device Name" \
+              | awk -F':' '{print $3;}' \
+              | sed -E 's/^\s*//g' \
+              | sort \
+              | uniq \
+              | tr '\n' ';' \
+              | sed -E 's/;$//g')
 fi
 
 date=$(date --rfc-3339=seconds)
+host=$(hostname)
 
 platform="{
   \"cpu\": {
@@ -110,9 +138,11 @@ platform="{
     \"cores\": ${cores}
   },
   \"gpu\": {
-    \"model\": \"${gpu}\"
+    \"model\": \"${gpu}\",
+    \"devices\": ${devices}
   },
-  \"date\": \"${date}\"
+  \"date\": \"${date}\",
+  \"host\": \"${hostname}\"
 }"
 
 echo "${platform}" > ${kitsune}/platform.json
