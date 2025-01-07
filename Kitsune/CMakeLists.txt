@@ -388,6 +388,13 @@ if (TEST_KOKKOS_MODE AND KITSUNE_BENCHMARK)
   set(TEST_KOKKOS_LANG ON)
 endif ()
 
+# CMake adds -Werror=date-time in order to get reproducible builds. This is a
+# good idea in general, but we use nvcc in "benchmark" mode which does not
+# support this. So just remove it since we are without bitwise reproducibliity
+# (for now). And yes, this really should not have been a "definition" in the
+# first place since this very much isn't one.
+remove_definitions(-Werror=date-time)
+
 add_subdirectory(Benchmarks)
 
 # FIXME: The SingleSource directory contains tests that themselves have not been
