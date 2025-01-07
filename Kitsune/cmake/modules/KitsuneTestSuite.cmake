@@ -193,11 +193,22 @@ function(kitsune_singlesource)
         kit_singlesource_test(${source} ${lang} "none" "${cmdargs}" "${data}")
       endif ()
     elseif (lang STREQUAL "kokkos")
-      if (TEST_KOKKOS_LANG)
-        kit_singlesource_test(${source} ${lang} "none" "${cmdargs}" "${data}")
-      endif ()
+      # Kokkos is only tested with the GPU-centric tapir targets because those
+      # are the only ones that we really care about as far as Kokkos support
+      # goes.
+      #
+      # We don't test "vanilla" Kokkos. We only care about Kokkos on GPU's. This
+      # requires a specific installation of Kokkos for every GPU that we are
+      # care about. As far as I am aware, it is not possible to have both
+      # support for both NVIDIA and AMD GPU's in the same Kokkos installation.
+      # Kitsune builds Kokkos in "serial" mode since Kitsune only cares about
+      # the frontend i.e. the Kokkos templates, so we cannot use the Kokkos
+      # installation that is bundled with Kitsune either.
+      #
+      # TODO: It would be nice to be able to automatically compare against
+      # "Kokkos+cuda" and "Kokkos+hip", so we may want to try and find a way to
+      # do so.
       if (TEST_KOKKOS_MODE)
-        # We only care about testing Kokkos with the GPU-centric targets
         if (TEST_CUDA_TARGET)
           kit_singlesource_test(${source} ${lang} "cuda" "${cmdargs}" "${data}")
         endif ()
