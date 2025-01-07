@@ -1,7 +1,6 @@
 // Straightforward vector addition
 
 #include <iostream>
-#include <kitsune.h>
 #include <timing.h>
 
 #include <cuda_runtime.h>
