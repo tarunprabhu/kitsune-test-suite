@@ -35,7 +35,7 @@ option(KITSUNE_TEST_KOKKOS_MODE
   "Check Kitsune's -fkokkos-mode if it has been enabled"
   ON)
 
-option(KITSUNE_RUN_ALL
+option(KITSUNE_BENCHMARK
   "Build and run the performance tests. The tests in the Benchmarks directory \
 are intended to be used for both correctness testing and performance. Setting \
 this option will result in the non-kitsune single-source tests (.cu, .hip \
@@ -342,7 +342,7 @@ else ()
   set(TEST_KOKKOS_MODE OFF)
 endif ()
 
-if (TEST_CUDA_TARGET AND KITSUNE_RUN_ALL)
+if (TEST_CUDA_TARGET AND KITSUNE_BENCHMARK)
   set(TEST_CUDA_LANG ON)
 
   # We could use clang to compile the .cu files, but since this is only useful
@@ -362,7 +362,7 @@ if (TEST_CUDA_TARGET AND KITSUNE_RUN_ALL)
 endif ()
 
 # See the comments for the cuda language tests above. Same goes for hip.
-if (TEST_HIP_TARGET AND KITSUNE_RUN_ALL)
+if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
   set(TEST_HIP_LANG ON)
 
   # We could use clang to compile the .hip files, but since this is only useful
@@ -384,7 +384,7 @@ endif ()
 # Similar to Cuda and Hip, we may also want to check the .kokkos.cpp files with
 # a regular C++ compiler for performance checks. These are generally only useful
 # when doing performance comparisons.
-if (TEST_KOKKOS_MODE AND KITSUNE_RUN_ALL)
+if (TEST_KOKKOS_MODE AND KITSUNE_BENCHMARK)
   set(TEST_KOKKOS_LANG ON)
 endif ()
 
