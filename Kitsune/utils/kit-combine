@@ -12,6 +12,11 @@ import sys
 # match, the tapir target is the third.
 re_kit_test = re.compile('^(.+)-(kit|kokkos)-(.+)[.]test$')
 
+# The result expression to extract the name of the test and the language from
+# name of the test script file. This name of the language is guaranteed to be
+# either culang or hiplang.
+re_vanilla_test = re.compile('^(.+)-(culang|hiplang)[.]test$')
+
 # Get the test name. The argument is a path to a .test file. In the case of a
 # Benchmark or MultiSource test, the test name will be the name of the directory
 # containing the .test file. For tests in the SingleSource directory, the base
@@ -38,10 +43,27 @@ def get_tapir_target(base: str) -> str:
     b = os.path.basename(base)
     m = re_kit_test.match(b)
     if not m:
-        sys.exit(f'Could not get tapir target from test name: {base}')
+        sys.exit(f'Could not get tapir target: {base}')
     if m[2] == 'kokkos':
         return 'kokkos-' + m[3]
     return m[3]
+
+# Get either the tapir target or the language name from the test name. The
+# argument is the path to a .test file. Some of the benchmarks are straight cuda
+# or hip source files that are not compiled with Kitsune and do not have a tapir
+# target associated with them. In these cases, the name of the language will be
+# part of the test name.
+def get_tapir_target_or_lang(base: str) -> str:
+    b = os.path.basename(base)
+    m = re_vanilla_test.match(b)
+    if not m:
+        return get_tapir_target(base)
+    if m[2] == 'culang':
+        return 'cuda-lang'
+    elif m[2] == 'hiplang':
+        return 'hip-lang'
+    else:
+        sys.exit(f'Could not get tapir target or language: {base}')
 
 # Get the compile time. For now, this only works for single-source tests.
 def get_compile_time(build_dir: str, base: str) -> int:
@@ -121,7 +143,7 @@ def process(report_file: str, build_dir: str):
         if name not in combined['tests']:
             combined['tests'][name] = {}
 
-        tt = get_tapir_target(base)
+        tt = get_tapir_target_or_lang(base)
         tts.add(tt)
 
         data = {}
@@ -136,7 +158,7 @@ def process(report_file: str, build_dir: str):
         # for unrelated tests. Simply adding up the times for each object file
         # in a multi-source file will not give an accurate value for the
         # compile time.
-        # TODO: We could do get a reasonable value for the link time of a
+        # TODO: We could get a reasonable value for the link time of a
         # multi-source test, so we should do that at some point.
         data['compile-time'] = get_compile_time(build_dir, base)
         data['link-time'] = get_link_time(build_dir, base)
