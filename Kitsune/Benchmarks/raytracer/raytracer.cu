@@ -3,7 +3,6 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
-#include <kitsune.h>
 #include <timing.h>
 
 #include <cuda_runtime.h>
@@ -253,12 +252,6 @@ int main(int argc, char **argv) {
   Pathtracer<<<blocksPerGrid, threadsPerBlock>>>(sampleCount, img, totalPixels,
                                                  imageWidth, imageHeight);
   cudaDeviceSynchronize();
-  err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    fprintf(stderr, "Failed to launch vectorAdd kernel (error code %s)!\n",
-            cudaGetErrorString(err));
-    exit(EXIT_FAILURE);
-  }
   uint64_t ms = main.stop();
 
   std::cout << "done\n";
