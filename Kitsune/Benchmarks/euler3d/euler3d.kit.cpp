@@ -541,16 +541,12 @@ int main(int argc, char **argv) {
   dump(variables, nel, nelr);
 
   std::cout << "\n"
-            << "      Total time : " << main.total() << " ms\n"
-            << "       Init time : " << init.total() << " ms\n"
-            << "    Compute time : " << iters.total() << " ms\n"
-            << "            copy : " << copy.total()
-            << " seconds (average: " << copy.total() / copy.entries()
-            << " seconds).\n"
-            << "              sf : " << sf.total()
-            << " seconds (average: " << sf.total() / sf.entries() << " ms)\n"
-            << "              rk : " << rk.total()
-            << " seconds (average: " << rk.total() / rk.entries() << " ms)\n"
+            << "      Total time : " << main.total() << " us\n"
+            << "       Init time : " << init.total() << " us\n"
+            << "    Compute time : " << iters.total() << " us\n"
+            << "            copy : " << copy.total() << " us\n"
+            << "              sf : " << sf.total() << " us\n"
+            << "              rk : " << rk.total() << " us\n"
             << "----\n\n";
 
   // TODO: Actually check that the result is correct

@@ -27,9 +27,15 @@ set(KITSUNE_SKIP_TAPIR_TARGETS "" CACHE STRING
   "The list of tapir targets to skip. Each element of this list must be a \
 value that can be passed to the -ftapir= option of the frontend")
 
-set(KITSUNE_TEST_INPUT_SIZE "default" CACHE STRING
+set(KITSUNE_TEST_INPUT_SIZE "small" CACHE STRING
   "The size of the input in the tests that support it. Must be one of \
-\"default\", or \"small\". Defaults to \"default\"")
+\"small\", or \"medium\". Defaults to \"small\"")
+
+set(KITSUNE_NVARCH "" CACHE STRING
+  "Currently, Kitsune cannot automatically determine the sm version of an
+NVIDIA GPU. This must be set manually if Kitsune's default sm version does not
+match that of the available GPU. This simply adds the -ftapir-nvarch= option
+when building with the cuda tapir target")
 
 option(KITSUNE_TEST_KOKKOS_MODE
   "Check Kitsune's -fkokkos-mode if it has been enabled"
@@ -39,7 +45,7 @@ option(KITSUNE_BENCHMARK
   "Build and run the performance tests. The tests in the Benchmarks directory \
 are intended to be used for both correctness testing and performance. Setting \
 this option will result in the non-kitsune single-source tests (.cu, .hip \
-etc.) being built and run."
+etc.) being built and run. This implies KITSUNE_TEST_INPUT_SIZE=medium"
   OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
@@ -217,8 +223,8 @@ foreach (TAPIR_TARGET ${KITSUNE_SKIP_TAPIR_TARGETS})
 endforeach ()
 
 # Sanity check the test input size
-if (NOT KITSUNE_TEST_INPUT_SIZE STREQUAL "default" AND
-    NOT KITSUNE_TEST_INPUT_SIZE STREQUAL "small")
+if (NOT KITSUNE_TEST_INPUT_SIZE STREQUAL "small" AND
+    NOT KITSUNE_TEST_INPUT_SIZE STREQUAL "medium")
   message(FATAL_ERROR "Unknown test input size: ${KITSUNE_TEST_INPUT_SIZE}")
 endif ()
 
@@ -311,22 +317,28 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
     endif ()
   elseif (tapir_target STREQUAL "lambda")
     set(TEST_LAMBDA_TARGET ON)
+    message(STATUS "Testing tapir target: ${tapir_target}")
   elseif (tapir_target STREQUAL "omptask")
     set(TEST_OMPTASK_TARGET ON)
+    message(STATUS "Testing tapir target: ${tapir_target}")
   elseif (tapir_target STREQUAL "opencilk")
     set(TEST_OPENCILK_TARGET ON)
+    message(STATUS "Testing tapir target: ${tapir_target}")
   elseif (tapir_target STREQUAL "openmp")
     set(TEST_OPENMP_TARGET ON)
+    message(STATUS "Testing tapir target: ${tapir_target}")
   elseif (tapir_target STREQUAL "qthreads")
     set(TEST_QTHREADS_TARGET ON)
+    message(STATUS "Testing tapir target: ${tapir_target}")
   elseif (tapir_target STREQUAL "realm")
     set(TEST_REALM_TARGET ON)
+    message(STATUS "Testing tapir target: ${tapir_target}")
   elseif (tapir_target STREQUAL "serial")
     set(TEST_SERIAL_TARGET ON)
+    message(STATUS "Testing tapir target: ${tapir_target}")
   else ()
     message(FATAL_ERROR "Unknown tapir target: ${tapir_target}")
   endif ()
-  message(STATUS "Testing tapir target: ${tapir_target}")
 endforeach ()
 
 # Testing Kitsune's -fkokkos mode
@@ -377,7 +389,7 @@ if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
     PATHS ${HIP_PREFIX}/bin
     NO_DEFAULT_PATH)
 
-  set(CMAKE_HIP_COMPILER ${HIPCC})
+  # set(CMAKE_HIP_COMPILER ${HIPCC})
   enable_language(HIP)
 endif ()
 
@@ -386,6 +398,14 @@ endif ()
 # when doing performance comparisons.
 if (TEST_KOKKOS_MODE AND KITSUNE_BENCHMARK)
   set(TEST_KOKKOS_LANG ON)
+endif ()
+
+# When running benchmarks, don't use the small input size. If we ever add a
+# "large" size, that should automatically get accommodated here.
+if (KITSUNE_BENCHMARK)
+  if (KITSUNE_TEST_INPUT_SIZE STREQUAL "small")
+    set(KITSUNE_TEST_INPUT_SIZE "medium")
+  endif ()
 endif ()
 
 # CMake adds -Werror=date-time in order to get reproducible builds. This is a

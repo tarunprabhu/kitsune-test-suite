@@ -7,11 +7,9 @@
 using namespace kitsune;
 
 template <typename T> static void random_fill(mobile_ptr<T> data, size_t n) {
-  // clang-format off
   for (size_t i = 0; i < n; ++i) {
     data[i] = rand() / (T)RAND_MAX;
   }
-  // clang-format on
 }
 
 template <typename T>
@@ -42,20 +40,18 @@ int main(int argc, char **argv) {
             << std::flush;
   mobile_ptr<float> src(size);
   mobile_ptr<float> dst(size);
+
   random_fill(src, size);
-  std::cout << "  done.\n\n";
 
   std::cout << "Starting benchmark...\n";
-  unsigned int mb_size = (sizeof(float) * size) / (1024 * 1024);
-
-  for (int i = 0; i < iterations; i++) {
+  for (unsigned t = 0; t < iterations; t++) {
     timer.start();
     // clang-format off
-    forall(int i = 0; i < size; i++) {
+    forall(size_t i = 0; i < size; i++) {
       dst[i] = src[i];
     }
-    uint64_t ms = timer.stop();
-    std::cout << "\t" << i << ". copy time: " << ms << " ms\n";
+    uint64_t us = timer.stop();
+    std::cout << "\t" << t << ". iteration time: " << us << " us\n";
   }
 
   std::cout << "\n  Checking final result..." << std::flush;

@@ -210,6 +210,14 @@ int main(int argc, char *argv[]) {
   iters.stop();
   main.stop();
 
+  std::cout << "\n"
+            << "      Total time : " << main.total() << " us\n"
+            << "       Init time : " << init.total() << " us\n"
+            << "    Compute time : " << iters.total() << " us\n"
+            << "           Loop1 : " << loop1.total() << " us\n"
+            << "           Loop2 : " << loop2.total() << " us\n"
+            << "----\n\n";
+
   // TODO: Actually check that the output is correct.
   size_t errors = 0;
 

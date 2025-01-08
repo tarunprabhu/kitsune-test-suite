@@ -7,18 +7,15 @@
 using namespace kitsune;
 
 template <typename T> static void random_fill(mobile_ptr<T> arr, size_t n) {
-  T base_value = rand() / (T)RAND_MAX;
-  // clang-format off
-  forall(size_t i = 0; i < n; ++i) {
-    arr[i] = base_value + i;
+  for (size_t i = 0; i < n; ++i) {
+    arr[i] = rand() / (T)RAND_MAX;
   }
-  // clang-format on
 }
 
 template <typename T>
 static size_t check(const mobile_ptr<T> a, const mobile_ptr<T> b,
                     const mobile_ptr<T> c, size_t n) {
-  uint64_t errors = 0;
+  size_t errors = 0;
   for (size_t i = 0; i < n; i++) {
     float sum = a[i] + b[i];
     if (c[i] != sum)
@@ -36,6 +33,7 @@ int main(int argc, char *argv[]) {
     iterations = atoi(argv[2]);
   Timer timer("vecadd");
 
+  std::cout << "\n";
   std::cout << "---- vector addition benchmark (forall) ----\n"
             << "  Vector size: " << size << " elements.\n\n";
   std::cout << "  Allocating arrays and filling with random values..."
@@ -55,8 +53,8 @@ int main(int argc, char *argv[]) {
       c[i] = a[i] + b[i];
     }
     // clang-format on
-    uint64_t ms = timer.stop();
-    std::cout << "\t" << t << ". iteration time: " << ms << " ms\n";
+    uint64_t us = timer.stop();
+    std::cout << "\t" << t << ". iteration time: " << us << "us\n";
   }
 
   std::cout << "\n  Checking final result..." << std::flush;

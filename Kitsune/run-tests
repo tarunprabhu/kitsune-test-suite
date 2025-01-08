@@ -142,7 +142,7 @@ platform="{
     \"devices\": ${devices}
   },
   \"date\": \"${date}\",
-  \"host\": \"${hostname}\"
+  \"host\": \"${host}\"
 }"
 
 echo "${platform}" > ${kitsune}/platform.json

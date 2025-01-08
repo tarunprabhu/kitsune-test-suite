@@ -57,15 +57,15 @@ int main(int argc, char **argv) {
 
     std::cout << "Starting benchmark...\n";
 
-    for (int i = 0; i < iterations; i++) {
+    for (int t = 0; t < iterations; t++) {
       timer.start();
       // clang-format off
       Kokkos::parallel_for(size, KOKKOS_LAMBDA(const int i) {
         bufd[i] = bufs[i];
       });
       // clang-format on
-      uint64_t ms = timer.stop();
-      std::cout << "\t" << i << ". copy time: " << ms << " ms\n";
+      uint64_t us = timer.stop();
+      std::cout << "\t" << t << ". iteration time: " << us << " us\n";
     }
 
     std::cout << "\n  Checking final result..." << std::flush;

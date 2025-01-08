@@ -252,11 +252,10 @@ int main(int argc, char **argv) {
   Pathtracer<<<blocksPerGrid, threadsPerBlock>>>(sampleCount, img, totalPixels,
                                                  imageWidth, imageHeight);
   cudaDeviceSynchronize();
-  uint64_t ms = main.stop();
+  uint64_t us = main.stop();
 
   std::cout << "done\n";
-  std::cout << "\n\n  Total time: " << ms << " ms\n";
-  std::cout << "  Pixels/millisecond: " << totalPixels / ms << ".\n\n";
+  std::cout << "\n\n  Total time: " << us << " us\n";
 
   std::cout << "  Saving image..." << std::flush;
   std::ofstream img_file;
