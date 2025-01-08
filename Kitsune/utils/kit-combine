@@ -82,21 +82,29 @@ def get_compile_time(build_dir: str, base: str) -> int:
                 if line.startswith('real'):
                     time = float(line.split(' ')[-1].strip())
     # The time is recorded in seconds. But the per-kernel timings are in
-    # milliseconds. To keep things consistent, report this in milliseconds
-    return math.ceil(time * 1000)
+    # microseconds. To keep things consistent, report this in microseconds
+    return math.ceil(time * 1000000)
 
 # Get the link time.
 def get_link_time(build_dir: str, base: str) -> int:
     d = os.path.dirname(os.path.join(build_dir, base))
     name = re.sub('[.]test$', '', os.path.basename(base))
+    filename = os.path.join(d, name + '.link.time')
+
+    # In benchmark mode, we run the vanilla cuda and hip code with nvcc and
+    # hipcc respectively. Presumably because these are not the LLVM compilers
+    # being tested, the test suite does not record link times.
+    if not os.path.exists(filename):
+        return -1
+
     time = 0.0
-    with open(os.path.join(d, name + '.link.time'), 'r') as f:
+    with open(filename, 'r') as f:
         for line in f:
             if line.startswith('real'):
                 time = float(line.split(' ')[-1].strip())
     # The time is recorded in seconds. But the per-kernel timings are in
-    # milliseconds. To keep things consistent, report this in milliseconds
-    return math.ceil(time * 1000)
+    # microseconds. To keep things consistent, report this in microseconds
+    return math.ceil(time * 1000000)
 
 # Process the output file from a benchmark test and add it to the given data
 # object.
@@ -227,9 +235,9 @@ def parse_command_line_args():
         type = str,
         help =
         'Path to the "top-level" report produced when running the test-suite. '
-        'This is assumed to be present in the Kitsune subdirectory which is '
-        'of the top-level test-suite build directory. If it is not, the -b '
-        'option should be provided'
+        'This is assumed to be present in the Kitsune subdirectory of the '
+        'top-level test-suite build directory. If it is not, the -b option '
+        'should be provided'
     )
 
     return parser.parse_args()

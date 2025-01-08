@@ -5,79 +5,60 @@
 
 #include <cuda_runtime.h>
 
-void random_fill(float *data, size_t N) {
+template <typename T>
+static void random_fill(T *data, size_t N) {
   for (size_t i = 0; i < N; ++i)
-    data[i] = rand() / (float)RAND_MAX;
+    data[i] = rand() / (T)RAND_MAX;
 }
 
 template <typename T>
 static size_t check(const T *a, const T *b, const T *c, size_t n) {
-  uint64_t errors = 0;
-  for (size_t i = 0; i < n; i++) {
-    float sum = a[i] + b[i];
-    if (c[i] != sum)
+  size_t errors = 0;
+  for (size_t i = 0; i < n; i++)
+    if (c[i] != a[i] + b[i])
       errors++;
-  }
   return errors;
 }
 
-__global__ void VectorAdd(float *A, float *B, float *C, size_t N) {
+__global__ static void vecadd(const float *a, const float *b, float *c,
+                              size_t n) {
   size_t i = blockDim.x * blockIdx.x + threadIdx.x;
-  if (i < N)
-    C[i] = A[i] + B[i];
+  if (i < n)
+    c[i] = a[i] + b[i];
 }
 
 int main(int argc, char *argv[]) {
   size_t size = 1024 * 1024 * 256;
+  unsigned int iterations = 10;
   if (argc > 1)
     size = atol(argv[1]);
+  if (argc > 2)
+    iterations = atoi(argv[2]);
   Timer timer("vecadd");
 
-  fprintf(stdout, "problem size: %ld\n", size);
+  std::cout << "\n";
+  std::cout << "---- vector addition benchmark (cuda) ----\n"
+            << "  Vector size: " << size << " elements.\n\n";
+  std::cout << "  Allocating arrays and filling with random values..."
+            << std::flush;
 
-  // This is loosely for consistency with the launch parameters
-  // from kitsune.
-  int threadsPerBlock = 256;
-  int blocksPerGrid = (size + threadsPerBlock - 1) / threadsPerBlock;
-
-  cudaEvent_t start;
-  cudaEventCreate(&start);
-  cudaEventRecord(start);
-  cudaError_t err = cudaSuccess;
   float *a, *b, *c;
-  err = cudaMallocManaged(&a, size * sizeof(float));
-  if (err != cudaSuccess) {
-    fprintf(stderr, "failed to allocate managed memory for A!\n");
-    return 1;
-  }
-  err = cudaMallocManaged(&b, size * sizeof(float));
-  if (err != cudaSuccess) {
-    fprintf(stderr, "failed to allocate managed memory for B!\n");
-    return 1;
-  }
-  err = cudaMallocManaged(&c, size * sizeof(float));
-  if (err != cudaSuccess) {
-    fprintf(stderr, "failed to allocate managed memory for C!\n");
-    return 1;
-  }
+  cudaMallocManaged(&a, size * sizeof(float));
+  cudaMallocManaged(&b, size * sizeof(float));
+  cudaMallocManaged(&c, size * sizeof(float));
 
   random_fill(a, size);
   random_fill(b, size);
-  for (size_t i = 0; i < 10; ++i) {
-    cudaEvent_t kstart, kstop;
 
+  // This is loosely for consistency with the launch parameters from kitsune.
+  int threadsPerBlock = 256;
+  int blocksPerGrid = (size + threadsPerBlock - 1) / threadsPerBlock;
+  for (size_t t = 0; t < iterations; ++t) {
     timer.start();
-    cudaEventCreate(&kstart);
-    cudaEventCreate(&kstop);
-    cudaEventRecord(kstart);
-    VectorAdd<<<blocksPerGrid, threadsPerBlock>>>(a, b, c, size);
-    cudaEventRecord(kstop);
-    cudaEventSynchronize(kstop);
-    timer.stop();
-
-    float msecs = 0;
-    cudaEventElapsedTime(&msecs, kstart, kstop);
-    printf("kernel time: %7lg ms\n", msecs);
+    vecadd<<<blocksPerGrid, threadsPerBlock>>>(a, b, c, size);
+    cudaDeviceSynchronize();
+    uint64_t us = timer.stop();
+    std::cout << "\t" << t << ". iteration time: " << us << " us\n";
   }
 
   std::cout << "\n  Checking final result..." << std::flush;

@@ -27,10 +27,10 @@ int main(int argc, char *argv[]) {
     std::cout << "usage: saxpy [size] [iterations]\n";
     return 1;
   }
-  if (argc > 2)
-    iterations = atoi(argv[2]);
   if (argc > 1)
     size = atol(argv[1]);
+  if (argc > 2)
+    iterations = atoi(argv[2]);
   Timer init("init");
   Timer saxpy("saxpy");
 
@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
       y[i] = DEFAULT_Y_VALUE;
     }
     // clang-format on
-    uint64_t msInit = init.stop();
+    uint64_t usInit = init.stop();
 
     saxpy.start();
     // clang-format off
@@ -60,9 +60,9 @@ int main(int argc, char *argv[]) {
       y[i] = DEFAULT_A_VALUE * x[i] + y[i];
     }
     // clang-format on
-    uint64_t msSaxpy = saxpy.stop();
-    std::cout << "\t" << t << ". iteration time: " << (msInit + msSaxpy)
-              << " ms\n";
+    uint64_t usSaxpy = saxpy.stop();
+    std::cout << "\t" << t << ". iteration time: " << (usInit + usSaxpy)
+              << " us\n";
   }
 
   std::cout << "\n  Checking final result..." << std::flush;

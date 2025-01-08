@@ -16,7 +16,7 @@ template <typename T> static void random_fill(mobile_ptr<T> arr, size_t n) {
 template <typename T>
 static size_t check(const mobile_ptr<T> a, const mobile_ptr<T> b,
                     const mobile_ptr<T> c, size_t n) {
-  uint64_t errors = 0;
+  size_t errors = 0;
   for (size_t i = 0; i < n; i++) {
     float sum = a[i] + b[i];
     if (c[i] != sum)
@@ -28,9 +28,9 @@ static size_t check(const mobile_ptr<T> a, const mobile_ptr<T> b,
 int main(int argc, char *argv[]) {
   size_t size = 1024 * 1024 * 256;
   unsigned int iterations = 10;
-  if (argc >= 2)
+  if (argc > 1)
     size = atol(argv[1]);
-  if (argc == 3)
+  if (argc > 2)
     iterations = atoi(argv[2]);
   Timer timer("vecadd");
 
@@ -66,8 +66,8 @@ int main(int argc, char *argv[]) {
         bufc[i] = bufa[i] + bufb[i];
       });
       // clang-format on
-      uint64_t ms = timer.stop();
-      std::cout << "\t" << t << ". iteration time: " << ms << "ms\n";
+      uint64_t us = timer.stop();
+      std::cout << "\t" << t << ". iteration time: " << us << " us\n";
     }
 
     std::cout << "\n  Checking final result..." << std::flush;

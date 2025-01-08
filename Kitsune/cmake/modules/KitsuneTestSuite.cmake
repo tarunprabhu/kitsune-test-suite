@@ -24,7 +24,6 @@ include(SingleMultiSource)
 #    hip        Hip files (those with a .hip extension)
 #
 function (source_language source lang)
-  # We treat Kokkos as its own language.
   if (source MATCHES ".+[.]kokkos[.]cpp$" OR source MATCHES ".+[.]kokkos[.]c$")
     set(${lang} "kokkos" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]kit[.]c$" OR source MATCHES ".+[.]kit[.]c$")
@@ -86,9 +85,6 @@ function (kit_singlesource_test source lang tapir_target cmdargs data)
   llvm_test_verify(${GREP} -E "\"^exit 0$\"" %o)
   llvm_add_test_for_target(${target})
 
-  set(tapir_flags "-ftapir=${tapir_target}")
-  set(kokkos_flags "-fkokkos;-fkokkos-no-init")
-
   # The include directory in Kitsune/ contains headers for timings and, perhaps,
   # other things. The timing is only really needed for the benchmarks, but we
   # might as well tell the compiler to always look in that directory. It is
@@ -97,15 +93,39 @@ function (kit_singlesource_test source lang tapir_target cmdargs data)
   target_include_directories(${target} PUBLIC
     ${CMAKE_SOURCE_DIR}/Kitsune/include)
 
+  # We need to set the tapir flags on the link options, otherwise the runtime
+  # libraries (kitrt, opencilk etc.) will not be linked in correctly.
+  set(tapir_flags "-ftapir=${tapir_target}")
   if (NOT tapir_target STREQUAL "none")
     target_compile_options(${target} BEFORE PUBLIC "${tapir_flags}")
     target_link_options(${target} BEFORE PUBLIC "${tapir_flags}")
   endif ()
 
+  # We need this only because Kitsune cannot currently automatically detect the
+  # sm version of the GPU for which we are compiling. When we can do this
+  # automatically, or if we resort to creating a multi-target fat binary with
+  # a range of sm versions supported, this can (and should) go away
+  if (tapir_target STREQUAL "cuda" AND NOT KITSUNE_NVARCH STREQUAL "")
+    target_compile_options(${target} PUBLIC "-ftapir-nvarch=${KITSUNE_NVARCH}")
+  endif ()
+
+  # Since we do not support cross compiling, or portability across GPUs, just
+  # compile the vanilla cuda code for the current GPU. If this is not done, it
+  # will try to JIT the code which we don't want because it becomes a less fair
+  # comparison.
+  if (lang STREQUAL "cuda" AND tapir_target STREQUAL "none")
+    set_target_properties(${target} PROPERTIES CUDA_ARCHITECTURES "native")
+  endif ()
+
+  # There is a desire to set -fno-exceptions automatically when the Kitsune
+  # frontend is used. When that wish is fulfilled, this should be removed.
   if (lang STREQUAL "kitc++" OR lang STREQUAL "kokkos")
     target_compile_options(${target} BEFORE PUBLIC "-fno-exceptions")
   endif ()
 
+  # We probably need the kokkos flags on the linker as well because Kokkos'
+  # runtime does need to be linked, but I am not entirely certain.
+  set(kokkos_flags "-fkokkos;-fkokkos-no-init")
   if (lang STREQUAL "kokkos")
     target_compile_options(${target} BEFORE PUBLIC "${kokkos_flags}")
     target_link_options(${target} BEFORE PUBLIC "${kokkos_flags}")
@@ -197,7 +217,7 @@ function(kitsune_singlesource)
       # are the only ones that we really care about as far as Kokkos support
       # goes.
       #
-      # We don't test "vanilla" Kokkos. We only care about Kokkos on GPU's. This
+      # We don't test "vanilla" Kokkos. We only care about Kokkos on GPU's which
       # requires a specific installation of Kokkos for every GPU that we are
       # care about. As far as I am aware, it is not possible to have both
       # support for both NVIDIA and AMD GPU's in the same Kokkos installation.

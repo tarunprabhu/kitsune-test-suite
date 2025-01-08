@@ -46,7 +46,7 @@ using namespace kitsune;
  * Generic functions
  */
 template <typename T>
-static void cpy(mobile_ptr<T> dst_p, const mobile_ptr<T> src_p, int N) {
+void cpy(mobile_ptr<T> dst_p, const mobile_ptr<T> src_p, int N) {
   // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
   // We could try to find a way to make that type Kokkos-friendly, or just wait
   // until the [mobile_ptr] attribute is implemented which should make
@@ -62,7 +62,7 @@ static void cpy(mobile_ptr<T> dst_p, const mobile_ptr<T> src_p, int N) {
   Kokkos::fence();
 }
 
-static void dump(mobile_ptr<float> variables, int nel, int nelr) {
+void dump(mobile_ptr<float> variables, int nel, int nelr) {
   {
     std::ofstream file("density-kokkos-noview.dat");
     file << nel << " " << nelr << std::endl;
@@ -88,8 +88,8 @@ static void dump(mobile_ptr<float> variables, int nel, int nelr) {
   }
 }
 
-static void initialize_variables(int nelr, mobile_ptr<float> variables_p,
-                                 const mobile_ptr<float> ff_variable_p) {
+void initialize_variables(int nelr, mobile_ptr<float> variables_p,
+                          const mobile_ptr<float> ff_variable_p) {
   // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
   // We could try to find a way to make that type Kokkos-friendly, or just wait
   // until the [mobile_ptr] attribute is implemented which should make
@@ -107,10 +107,11 @@ static void initialize_variables(int nelr, mobile_ptr<float> variables_p,
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
-static void compute_flux_contribution(
-    const float density, const Float3 &momentum, const float density_energy,
-    const float pressure, Float3 &velocity, Float3 &fc_momentum_x,
-    Float3 &fc_momentum_y, Float3 &fc_momentum_z, Float3 &fc_density_energy) {
+void compute_flux_contribution(const float density, const Float3 &momentum,
+                               const float density_energy, const float pressure,
+                               Float3 &velocity, Float3 &fc_momentum_x,
+                               Float3 &fc_momentum_y, Float3 &fc_momentum_z,
+                               Float3 &fc_density_energy) {
   fc_momentum_x.x = velocity.x * momentum.x + pressure;
   fc_momentum_x.y = velocity.x * momentum.y;
   fc_momentum_x.z = velocity.x * momentum.z;
@@ -130,34 +131,32 @@ static void compute_flux_contribution(
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
-static void compute_velocity(float density, const Float3 &momentum,
-                             Float3 &velocity) {
+void compute_velocity(float density, const Float3 &momentum, Float3 &velocity) {
   velocity.x = momentum.x / density;
   velocity.y = momentum.y / density;
   velocity.z = momentum.z / density;
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
-static float compute_speed_sqd(const Float3 &velocity) {
+float compute_speed_sqd(const Float3 &velocity) {
   return velocity.x * velocity.x + velocity.y * velocity.y +
          velocity.z * velocity.z;
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
-static float compute_pressure(float density, float density_energy,
-                              float speed_sqd) {
+float compute_pressure(float density, float density_energy, float speed_sqd) {
   return (float(GAMMA) - float(1.0f)) *
          (density_energy - float(0.5f) * density * speed_sqd);
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
-static float compute_speed_of_sound(float density, float pressure) {
+float compute_speed_of_sound(float density, float pressure) {
   return sqrtf(float(GAMMA) * pressure / density);
 }
 
-static void compute_step_factor(int nelr, const mobile_ptr<float> variables_p,
-                                const mobile_ptr<float> areas_p,
-                                mobile_ptr<float> step_factors_p) {
+void compute_step_factor(int nelr, const mobile_ptr<float> variables_p,
+                         const mobile_ptr<float> areas_p,
+                         mobile_ptr<float> step_factors_p) {
   // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
   // We could try to find a way to make that type Kokkos-friendly, or just wait
   // until the [mobile_ptr] attribute is implemented which should make
@@ -198,16 +197,16 @@ static void compute_step_factor(int nelr, const mobile_ptr<float> variables_p,
   Kokkos::fence();
 }
 
-static void compute_flux(int nelr,
-                         const mobile_ptr<int> elements_surrounding_elements_p,
-                         const mobile_ptr<float> normals_p,
-                         const mobile_ptr<float> variables_p,
-                         mobile_ptr<float> fluxes_p,
-                         const mobile_ptr<float> ff_variable_p,
-                         const Float3 ff_flux_contribution_momentum_x,
-                         const Float3 ff_flux_contribution_momentum_y,
-                         const Float3 ff_flux_contribution_momentum_z,
-                         const Float3 ff_flux_contribution_density_energy) {
+void compute_flux(int nelr,
+                  const mobile_ptr<int> elements_surrounding_elements_p,
+                  const mobile_ptr<float> normals_p,
+                  const mobile_ptr<float> variables_p,
+                  mobile_ptr<float> fluxes_p,
+                  const mobile_ptr<float> ff_variable_p,
+                  const Float3 ff_flux_contribution_momentum_x,
+                  const Float3 ff_flux_contribution_momentum_y,
+                  const Float3 ff_flux_contribution_momentum_z,
+                  const Float3 ff_flux_contribution_density_energy) {
   // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
   // We could try to find a way to make that type Kokkos-friendly, or just wait
   // until the [mobile_ptr] attribute is implemented which should make
@@ -404,10 +403,9 @@ static void compute_flux(int nelr,
   Kokkos::fence();
 }
 
-static void time_step(int j, int nelr, mobile_ptr<float> old_variables_p,
-                      mobile_ptr<float> variables_p,
-                      mobile_ptr<float> step_factors_p,
-                      mobile_ptr<float> fluxes_p) {
+void time_step(int j, int nelr, mobile_ptr<float> old_variables_p,
+               mobile_ptr<float> variables_p, mobile_ptr<float> step_factors_p,
+               mobile_ptr<float> fluxes_p) {
   // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
   // We could try to find a way to make that type Kokkos-friendly, or just wait
   // until the [mobile_ptr] attribute is implemented which should make
@@ -605,12 +603,12 @@ int main(int argc, char **argv) {
   dump(variables, nel, nelr);
 
   std::cout << "\n"
-            << "      Total time : " << main.total() << " ms\n"
-            << "       Init time : " << init.total() << " ms\n"
-            << "    Compute time : " << iters.total() << " ms\n"
-            << "            copy : " << copy.total() << " ms\n"
-            << "              sf : " << sf.total() << " ms\n"
-            << "              rk : " << rk.total() << " ms\n"
+            << "      Total time : " << main.total() << " us\n"
+            << "       Init time : " << init.total() << " us\n"
+            << "    Compute time : " << iters.total() << " us\n"
+            << "            copy : " << copy.total() << " us\n"
+            << "              sf : " << sf.total() << " us\n"
+            << "              rk : " << rk.total() << " us\n"
             << "----\n\n";
 
   // TODO: Actually check that the result is correct

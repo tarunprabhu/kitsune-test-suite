@@ -16,18 +16,18 @@ template <typename T> static void random_fill(mobile_ptr<T> data, size_t n) {
     data[i] = (2.0 * 3.142) * (rand() / (T)RAND_MAX);
 }
 
-__attribute__((noinline)) static void struct_test(testit *ti) {
+__attribute__((always_inline)) void struct_test(testit *ti) {
   ti->a = 4;
   ti->b = ti->a + 4;
 }
 
-template <typename T> __attribute__((noinline)) static T math_call1(T value) {
+template <typename T> __attribute__((always_inline)) T math_call1(T value) {
   testit t;
   struct_test(&t);
   return fminf(value, 1234.56 - t.a + t.b);
 }
 
-template <typename T> __attribute__((noinline)) static T math_call2(T value) {
+template <typename T> __attribute__((always_inline)) T math_call2(T value) {
   return sqrtf(value);
 }
 

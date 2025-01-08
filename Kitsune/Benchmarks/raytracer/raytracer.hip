@@ -3,7 +3,6 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
-#include <kitsune.h>
 #include <timing.h>
 
 #include "hip/hip_runtime.h"
@@ -257,11 +256,10 @@ int main(int argc, char **argv) {
   hipLaunchKernelGGL(Pathtracer, dim3(blocksPerGrid), dim3(threadsPerBlock), 0,
                      0, sampleCount, img, totalPixels, imageWidth, imageHeight);
   HIPCHECK(hipDeviceSynchronize());
-  uint64_t ms = main.stop();
+  uint64_t us = main.stop();
 
   std::cout << "done\n";
-  std::cout << "\n\n  Total time: " << ms << " seconds.\n";
-  std::cout << "  Pixels/millisecond: " << totalPixels / ms << "\n\n";
+  std::cout << "\n\n  Total time: " << us << " us\n";
 
   std::cout << "  Saving image..." << std::flush;
   std::ofstream img_file;

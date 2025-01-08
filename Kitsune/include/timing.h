@@ -28,17 +28,17 @@ typedef struct Stats {
   /// time will simply be this divided by @ref entries.
   uint64_t total;
 
-  /// The minimum execution time, in milliseconds, of any one invocation.
+  /// The minimum execution time, in microseconds, of any one invocation.
   uint64_t min;
 
-  /// The maximum execution time, in milliseconds, of any one invocation.
+  /// The maximum execution time, in microseconds, of any one invocation.
   uint64_t max;
 } Stats;
 
 #ifdef __cplusplus
 
 using Clock = std::chrono::steady_clock;
-using Milliseconds = std::chrono::milliseconds;
+using Microseconds = std::chrono::microseconds;
 
 /// A simple timer class that is intended for timing and to keep track of
 /// statistics. Each instance of this class is intended to record the execution
@@ -81,7 +81,7 @@ public:
   /// Stop the timer. If the timer has not been started, this will have no
   /// effect. Otherwise, statistics will be recorded, and the number of entries
   /// will be incremented by one. This will return the duration, in
-  /// milliseconds, since the last call to start, or 0 if the timer has not
+  /// microseconds, since the last call to start, or 0 if the timer has not
   /// been started.
   uint64_t stop() {
     // Stop the clock so we don't capture anything that this method specifically
@@ -90,18 +90,18 @@ public:
     if (!tick)
       return 0;
 
-    uint64_t ms =
-        std::chrono::duration_cast<Milliseconds>(tock - *tick).count();
+    uint64_t us =
+        std::chrono::duration_cast<Microseconds>(tock - *tick).count();
 
     stats.entries += 1;
-    stats.total += ms;
-    if (ms < stats.min)
-      stats.min = ms;
-    if (ms > stats.max)
-      stats.max = ms;
+    stats.total += us;
+    if (us < stats.min)
+      stats.min = us;
+    if (us > stats.max)
+      stats.max = us;
     tick = std::nullopt;
 
-    return ms;
+    return us;
   }
 
   /// Get the total time recorded by this timer.
@@ -110,14 +110,14 @@ public:
   /// Get the total number of entries recorded by this timer.
   uint64_t entries() const { return stats.entries; }
 
-  /// Get the minimum time, in milliseconds, recorded by this timer.
+  /// Get the minimum time, in microseconds, recorded by this timer.
   uint64_t min() const { return stats.min; }
 
-  /// Get the maximum time, in milliseconds, recorded by this timer.
+  /// Get the maximum time, in microseconds, recorded by this timer.
   uint64_t max() const { return stats.max; }
 
-  /// Get the mean time, in milliseconds (rounded down to the nearest
-  /// millisecond), recorded by this timer
+  /// Get the mean time, in microseconds (rounded down to the nearest
+  /// microsecond), recorded by this timer
   uint64_t mean() const { return stats.total / stats.entries; }
 
   /// Print the statistics for this region in JSON format to the given output
