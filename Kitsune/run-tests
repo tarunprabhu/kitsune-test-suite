@@ -106,20 +106,27 @@ fi
 # GPU's on it. The more likely case is that there are multiple devices of the
 # same model. Optimize for that scenario but be flexible enough to record all
 # the GPU's if that is not the case.
+#
 gpu=""
 devices=0
 if [ -n "${nvidia_smi}" ]; then
-    devices=$(nvidia-smi -L | wc -l)
-    gpu=$(nvidia-smi -L \
+    gpus=$(nvidia-smi -L | wc -l)
+    nvidia=$(nvidia-smi -L \
                   | sed -E 's/GPU[ ]*[0-9]+:[ ]*//g' \
                   | sed -E 's/[ ]*[(]UUID:[ ]*.+[)]//g' \
                   | sort \
                   | uniq \
                   | tr '\n' ';' \
                   | sed -E 's/;$//g')
-elif [ -n "${rocm_smi}" ]; then
-    devices=$(rocm-smi -i | wc -l)
-    gpu=$(rocm-smi -i \
+    if [ -n "${gpu}" ]; then
+        gpu="${gpu};"
+    fi
+    gpu="${gpu}${nvidia}"
+    devices=$(echo "${devices} + ${gpus}" | bc)
+fi
+if [ -n "${rocm_smi}" ]; then
+    gpus=$(rocm-smi -i | wc -l)
+    amd=$(rocm-smi -i \
               | grep "Device Name" \
               | awk -F':' '{print $3;}' \
               | sed -E 's/^\s*//g' \
@@ -127,6 +134,11 @@ elif [ -n "${rocm_smi}" ]; then
               | uniq \
               | tr '\n' ';' \
               | sed -E 's/;$//g')
+    if [ -n "${gpu}" ]; then
+        gpu="${gpu};"
+    fi
+    gpu="${gpu}${amd}"
+    devices=$(echo "${devices} + ${gpus}" | bc)
 fi
 
 date=$(date --rfc-3339=seconds)

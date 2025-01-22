@@ -1,10 +1,12 @@
-// Straightforward vector addition
-
 #include <iostream>
 #include <kitsune.h>
 #include <timing.h>
 
 using namespace kitsune;
+
+void fill(mobile_ptr<float> data, size_t n);
+void vec_add(const mobile_ptr<float> a, const mobile_ptr<float> b,
+             mobile_ptr<float> c, size_t N);
 
 template <typename T> static void random_fill(mobile_ptr<T> arr, size_t n) {
   for (size_t i = 0; i < n; ++i) {
@@ -40,20 +42,17 @@ int main(int argc, char *argv[]) {
   mobile_ptr<float> a(size);
   mobile_ptr<float> b(size);
   mobile_ptr<float> c(size);
-  random_fill(a, size);
-  random_fill(b, size);
+  fill(a, size);
+  fill(b, size);
   std::cout << "  done.\n\n";
 
   for (unsigned t = 0; t < iterations; t++) {
     timer.start();
-    // clang-format off
-    forall(int i = 0; i < size; i++) {
-      c[i] = a[i] + b[i];
-    }
-    // clang-format on
+    vec_add(a, b, c, size);
     uint64_t us = timer.stop();
     std::cout << "\t" << t << ". iteration time: " << us << "us\n";
   }
+  std::cout << "  Checking final result..." << std::flush;
 
   std::cout << "\n  Checking final result..." << std::flush;
   size_t errors = check(a, b, c, size);

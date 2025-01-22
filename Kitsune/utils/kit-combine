@@ -21,11 +21,16 @@ re_vanilla_test = re.compile('^(.+)-(culang|hiplang)[.]test$')
 # Benchmark or MultiSource test, the test name will be the name of the directory
 # containing the .test file. For tests in the SingleSource directory, the base
 # name will be of the form <test-name>-kit-<tapir-target>.test. Everything in
-# the Kitsune/SingleSource directory is guaranteed to be a Kitsune test
+# the Kitsune/SingleSource directory is guaranteed to be a Kitsune test. Some
+# tests in the MultiSource directory may have the same name as those in the
+# SingleSource or Benchmark directories. In this case, tag them with a multifile
+# suffix to ensure that we know what they are. We care about those because they
+# use LTO, so we would like them to be distinct.
 def get_name(base: str) -> str:
-    if base.startswith('Kitsune/Benchmarks') or \
-       base.startswith('Kitsune/MultiSource'):
+    if base.startswith('Kitsune/Benchmarks'):
         return os.path.basename(os.path.dirname(base))
+    elif base.startswith('Kitsune/MultiSource'):
+        return f'{os.path.basename(os.path.dirname(base))}-multifile'
     elif base.startswith('Kitsune/SingleSource'):
         b = os.path.basename(base)
         m = re_kit_test.match(b)
@@ -168,6 +173,7 @@ def process(report_file: str, build_dir: str):
         # compile time.
         # TODO: We could get a reasonable value for the link time of a
         # multi-source test, so we should do that at some point.
+        data['source'] = base
         data['compile-time'] = get_compile_time(build_dir, base)
         data['link-time'] = get_link_time(build_dir, base)
         data['size'] = test['metrics']['size']
