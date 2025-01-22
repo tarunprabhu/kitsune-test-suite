@@ -416,16 +416,8 @@ endif ()
 remove_definitions(-Werror=date-time)
 
 add_subdirectory(Benchmarks)
-
-# FIXME: The SingleSource directory contains tests that themselves have not been
-# checked for "sanity". Until then, we don't descend into it, but once we check
-# that those tests are actually sound, this should be enabled.
 add_subdirectory(SingleSource)
-
-# FIXME: Not all tests in the MultiSource directory have valid CMakeLists.txt or
-# Makefile's yet. Until those are setup, don't descend into the directory at
-# all.
-# add_subdirectory(MultiSource)
+add_subdirectory(MultiSource)
 
 add_subdirectory(utils)
 

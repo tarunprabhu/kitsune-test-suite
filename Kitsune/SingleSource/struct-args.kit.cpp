@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
 
   random_fill(dst, size);
   random_fill(src, size);
-  std::memcpy(cpy.get(), dst.get(), size * sizeof(Vec));
+  std::memcpy((Vec*)cpy.get(), (Vec*)dst.get(), size * sizeof(Vec));
 
   // clang-format off
   forall(size_t i = 0; i < size; i++) {

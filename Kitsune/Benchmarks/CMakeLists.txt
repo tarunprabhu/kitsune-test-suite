@@ -1,10 +1,9 @@
-# At some point, we may want to consider using GLOB to automatically detect the
-# directories here, but for now, do everything manually since it is marginally
-# "safer".
+# If a new directory is added, cmake may need to be re-run before it is picked
+# up.
+file(GLOB dirs LIST_DIRECTORIES ON CONFIGURE_DEPENDS *)
 
-add_subdirectory(copy)
-add_subdirectory(euler3d)
-add_subdirectory(raytracer)
-add_subdirectory(saxpy)
-add_subdirectory(srad)
-add_subdirectory(vecadd)
+foreach (dir IN LISTS dirs)
+  if (IS_DIRECTORY "${dir}")
+    add_subdirectory("${dir}")
+  endif ()
+endforeach ()

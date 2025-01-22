@@ -49,10 +49,9 @@ function (source_language source lang)
   endif ()
 endfunction ()
 
-# Setup a single-source test for the given tapir target.
+# Register the target as a test.
 #
-#     source         The absolute path to the source file
-#     lang           The source language
+#     target
 #     tapir_target   The tapir target. A value of "none" is a special case. It
 #                    will be treated as "not to be built with any tapir target"
 #     cmdargs        A list of command line arguments to be passed when running
@@ -60,22 +59,7 @@ endfunction ()
 #     data           A list of files containing that will be used by the test.
 #                    These will be copied into the build directory.
 #
-function (kit_singlesource_test source lang tapir_target cmdargs data)
-  get_filename_component(base "${source}" NAME_WLE)
-  string(REPLACE "." "-" base "${base}")
-  if (tapir_target STREQUAL "none")
-    if (lang STREQUAL "cuda")
-      set(target "${base}-culang")
-    elseif (lang STREQUAL "hip")
-      set(target "${base}-hiplang")
-    else ()
-      set(target "${base}-nokit")
-    endif ()
-  else ()
-    set(target "${base}-${tapir_target}")
-  endif ()
-
-  message(STATUS "Setting up test: ${target}")
+function (register_test target tapir_target cmdargs data)
   llvm_test_executable_no_test(${target} ${source})
   llvm_test_run(WORKDIR "%S" "${cmdargs}")
   llvm_test_data(${target} ${data})
@@ -108,6 +92,35 @@ function (kit_singlesource_test source lang tapir_target cmdargs data)
   if (tapir_target STREQUAL "cuda" AND NOT KITSUNE_NVARCH STREQUAL "")
     target_compile_options(${target} PUBLIC "-ftapir-nvarch=${KITSUNE_NVARCH}")
   endif ()
+endfunction ()
+
+# Setup a single-source test for the given tapir target.
+#
+#     source         The absolute path to the source file
+#     lang           The source language
+#     tapir_target   The tapir target. A value of "none" is a special case. It
+#                    will be treated as "not to be built with any tapir target"
+#     cmdargs        A list of command line arguments to be passed when running
+#                    the test
+#     data           A list of files containing that will be used by the test.
+#                    These will be copied into the build directory.
+#
+function (kit_singlesource_test source lang tapir_target cmdargs data)
+  get_filename_component(base "${source}" NAME_WLE)
+  string(REPLACE "." "-" base "${base}")
+  if (tapir_target STREQUAL "none")
+    if (lang STREQUAL "cuda")
+      set(target "${base}-culang")
+    elseif (lang STREQUAL "hip")
+      set(target "${base}-hiplang")
+    else ()
+      set(target "${base}-nokit")
+    endif ()
+  else ()
+    set(target "${base}-${tapir_target}")
+  endif ()
+
+  register_test("${target}" "${tapir_target}" "${cmdargs}" "${data}")
 
   # Since we do not support cross compiling, or portability across GPUs, just
   # compile the vanilla cuda code for the current GPU. If this is not done, it
@@ -256,3 +269,168 @@ function(kitsune_singlesource)
     endif ()
   endforeach()
 endfunction()
+
+# Create a target with the given name. This should never be called directly. It
+# is only intended to be used by kitsune_multisource(). This will add the
+# tapir target flag to the compile and link options of the created target. If
+# the KOKKOS option argument is provided, it will also add the correct kokkos
+# flags to the target.
+#
+# ARGUMENTS
+#
+#     base          The base name of the target
+#     type          Must be one of "EXECUTABLE", "SHARED", or "STATIC"
+#     tapir_target  The tapir target. This must be a target that is a valid
+#                   argument of the -ftapir flag
+#     kokkos        If ON, kokkos mode should be enabled on the target
+#     cmdargs       A list of command line arguments to be passed when running
+#                   the test
+#     data          A list of files containing that will be used by the test.
+#                   These will be copied into the build directory.
+#
+# RETURN
+#
+#     out           The list to which to append the target that was created
+#
+macro(make_target base type tapir_target kokkos out)
+  set(target)
+  if (kokkos)
+    set(target "${base}-kokkos-${tapir_target}")
+  else ()
+    set(target "${base}-${tapir_target}")
+  endif ()
+
+  if (type STREQUAL "EXECUTABLE")
+    # The executable target will be created by register_test().
+    register_test("${target}" "${tapir_target}" "${cmdargs}" "${data}")
+  elseif (type STREQUAL "SHARED")
+    add_library(${target} SHARED)
+  elseif (type STREQUAL "STATIC")
+    add_library(${target} STATIC)
+  endif ()
+
+  target_include_directories(${target} PUBLIC
+    ${CMAKE_SOURCE_DIR}/Kitsune/include)
+
+  set(tapir_flags "-ftapir=${tapir_target}")
+  target_compile_options(${target} BEFORE PUBLIC -flto ${tapir_flags})
+
+  # FIXME: The -fno-exceptions might cause problems in Fortran (should be
+  # ignored in C). We should change Kitsune to disable exceptions by default
+  # when Tapir is enabled. Once that is done, this flag should be removed.
+  target_compile_options(${target} PUBLIC -fno-exceptions)
+
+  target_link_options(${target} PUBLIC ${tapir_flags} -flto)
+
+  if (kokkos)
+    set(kokkos_flags "-fkokkos -fkokkos-no-init")
+    target_compile_options(${target} BEFORE PUBLIC ${kokkos_flags})
+    target_link_options(${target} BEFORE PUBLIC ${kokkos_flags})
+  endif ()
+
+  list(APPEND ${out} ${target})
+endmacro ()
+
+# Setup executables for a multi-source test. Unlike the single-source tests, we
+# will never try to be clever and determine exactly how to build such tests.
+# They could be arbitrarily complex (since we could potentially dump a sizable
+# application there). Instead, we expect a that a CMakeLists.txt file is
+# provided with each multi-source test that does most of the work. However, we
+# do need to provide different flags depending on the tapir targets and other
+# other frontend options (such as Kokkos mode) that we wish to test.
+#
+# This function will take a base name and using that, create a cmake target for
+# each tapir target being tested. The type of the cmake target must be provided
+# and should be one of EXECUTABLE, STATIC and SHARED. The first of these creates
+# and executable target while the remaining create a static and shared library
+# respectively. This function will add the some compiler and linker options to
+# the target. A list of these targets will be returned.
+#
+# It is expected that the CMakeLists.txt file for the multi-source test will
+# loop over the returned targets. This is not ideal since the loop will be
+# repeated in each multi-source test, but it'll have to do for now.
+#
+# If the KOKKOS option argument is provided, only the GPU-centric tapir targets
+# (if any are enabled) will be created.
+#
+# ARGUMENTS
+#
+#     base       The base name of the target to be created
+#
+# OPTION ARGUMENTS
+#
+#     <type>     Exactly one of EXECUTABLE, SHARED, or STATIC is required
+#
+#     KOKKOS     If provided, indicates that the multi-source test contains
+#                Kokkos constructs that should be processed with Kitsune's
+#                Kokkos-mode (if enabled).
+#
+# KEYWORD ARGUMENTS
+#
+#     CMDARGS    The list of command line arguments to be passed when running
+#                the test
+#
+#     DATA       A list of files containing data that will be used by the
+#                test. These will be copied to the build directory
+#
+# OUTPUT
+#
+#     out        The list of targets that were created
+#
+function (kitsune_multisource base out)
+  cmake_parse_arguments(KIT "EXECUTABLE;SHARED;STATIC;KOKKOS" "" "CMDARGS;DATA" ${ARGN})
+  set(base "${base}-kit")
+  set(cmdargs "${KIT_CMDARGS}")
+  set(data "${KIT_DATA}")
+
+  set(type)
+  if (KIT_EXECUTABLE)
+    set(type "EXECUTABLE")
+  elseif (KIT_SHARED)
+    set(type "SHARED")
+  elseif (KIT_STATIC)
+    set(type "STATIC")
+  else ()
+    message(FATAL_ERROR "Unknown multisource target type")
+  endif ()
+
+  set(targets)
+  if (KIT_KOKKOS)
+    if (TEST_CUDA_TARGET)
+      make_target(${base} ${type} "cuda" ${KIT_KOKKOS} targets)
+    endif ()
+    if (TEST_HIP_TARGET)
+      make_target(${base} ${type} "hip" ${KIT_KOKKOS} targets)
+    endif()
+  else ()
+    if (TEST_CUDA_TARGET)
+      make_target(${base} ${type} "cuda" ${KIT_KOKKOS} targets)
+    endif ()
+    if (TEST_HIP_TARGET)
+      make_target(${base} ${type} "hip" ${KIT_KOKKOS} targets)
+    endif()
+    if (TEST_LAMBDA_TARGET)
+      make_target(${base} ${type} "lambda" ${KIT_KOKKOS} targets)
+    endif ()
+    if (TEST_OMPTASK_TARGET)
+      make_target(${base} ${type} "omptask" ${KIT_KOKKOS} targets)
+    endif ()
+    if (TEST_OPENCILK_TARGET)
+      make_target(${base} ${type} "opencilk" ${KIT_KOKKOS} targets)
+    endif()
+    if (TEST_OPENMP_TARGET)
+      make_target(${base} ${type} "openmp" ${KIT_KOKKOS} targets)
+    endif ()
+    if (TEST_QTHREADS_TARGET)
+      make_target(${base} ${type} "qthreads" ${KIT_KOKKOS} targets)
+    endif ()
+    if (TEST_REALM_TARGET)
+      make_target(${base} ${type} "realm" ${KIT_KOKKOS} targets)
+    endif ()
+    if (TEST_SERIAL_TARGET)
+      make_target(${base} ${type} "serial" ${KIT_KOKKOS} targets)
+    endif ()
+  endif ()
+
+  set(${out} ${targets} PARENT_SCOPE)
+endfunction ()
