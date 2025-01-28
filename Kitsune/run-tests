@@ -55,8 +55,8 @@ else
 fi
 
 if [ -z "${lit}" ] || ! [ -x "${lit}" ]; then
-   echo "Could not find suitable lit executable"
-   exit 1
+    echo "Could not find suitable lit executable"
+    exit 1
 fi
 
 # The kitsune tests must be run sequentially. Some CPU tapir targets like
@@ -70,28 +70,30 @@ fi
 # but keep it for now. We will definitely want to revisit this at some point.
 NO_STOP_MESSAGE=1 ${lit} -j 1 -o ${kitsune}/ts-report.json ${kitsune}
 
+# This should return a non-zero exit code if any tests failed.
+pass=$?
+
 # It is unlikely that there will be CPU's with different models on the test
 # node. But if that does happen, we don't really care since this is only
 # intended to be informational.
 cpu="<<UNKNOWN>>"
 cores="0"
-if ls -l /proc/cpuinfo > /dev/null 2>&1; then
-    cpu=$(cat /proc/cpuinfo \
-              | grep "model name" \
-              | sed 's/model name\s*:\s*//g' \
-              | sort \
-              | uniq)
-    cores=$(cat /proc/cpuinfo \
-                | grep "processor" \
-                | sed 's/processor\s*:\s*//g' \
-                | wc -l)
+if ls -l /proc/cpuinfo >/dev/null 2>&1; then
+    cpu=$(cat /proc/cpuinfo |
+        grep "model name" |
+        sed 's/model name\s*:\s*//g' |
+        sort |
+        uniq)
+    cores=$(cat /proc/cpuinfo |
+        grep "processor" |
+        sed 's/processor\s*:\s*//g' |
+        wc -l)
 else
     echo "Looking up CPU info on non-Linux platforms not implemented"
 fi
 
 nvidia_smi=$(command -v nvidia-smi)
 if [ $? -ne 0 ]; then
-
     nvidia_smi=""
 fi
 
@@ -111,13 +113,13 @@ gpu=""
 devices=0
 if [ -n "${nvidia_smi}" ]; then
     gpus=$(nvidia-smi -L | wc -l)
-    nvidia=$(nvidia-smi -L \
-                  | sed -E 's/GPU[ ]*[0-9]+:[ ]*//g' \
-                  | sed -E 's/[ ]*[(]UUID:[ ]*.+[)]//g' \
-                  | sort \
-                  | uniq \
-                  | tr '\n' ';' \
-                  | sed -E 's/;$//g')
+    nvidia=$(nvidia-smi -L |
+        sed -E 's/GPU[ ]*[0-9]+:[ ]*//g' |
+        sed -E 's/[ ]*[(]UUID:[ ]*.+[)]//g' |
+        sort |
+        uniq |
+        tr '\n' ';' |
+        sed -E 's/;$//g')
     if [ -n "${gpu}" ]; then
         gpu="${gpu};"
     fi
@@ -126,14 +128,14 @@ if [ -n "${nvidia_smi}" ]; then
 fi
 if [ -n "${rocm_smi}" ]; then
     gpus=$(rocm-smi -i | wc -l)
-    amd=$(rocm-smi -i \
-              | grep "Device Name" \
-              | awk -F':' '{print $3;}' \
-              | sed -E 's/^\s*//g' \
-              | sort \
-              | uniq \
-              | tr '\n' ';' \
-              | sed -E 's/;$//g')
+    amd=$(rocm-smi -i |
+        grep "Device Name" |
+        awk -F':' '{print $3;}' |
+        sed -E 's/^\s*//g' |
+        sort |
+        uniq |
+        tr '\n' ';' |
+        sed -E 's/;$//g')
     if [ -n "${gpu}" ]; then
         gpu="${gpu};"
     fi
@@ -157,12 +159,16 @@ platform="{
   \"host\": \"${host}\"
 }"
 
-echo "${platform}" > ${kitsune}/platform.json
+echo "${platform}" >${kitsune}/platform.json
 
-# Generate the combined report. There is no reason to do this as a separate
-# step. It can always be done separately if needed. The -b option must be given
-# the root of the test suite. The test
-${kitsune}/utils/kit-combine \
-     -b "${test_suite}" \
-     -o "${outfile}" \
-     "${kitsune}/ts-report.json"
+if [ ${pass} -eq 0 ]; then
+    # Generate the combined report. There is no reason to do this as a separate
+    # step. It can always be done separately if needed. The -b option must be
+    # given the root of the test suite. The test
+    ${kitsune}/utils/kit-combine \
+        -b "${test_suite}" \
+        -o "${outfile}" \
+        "${kitsune}/ts-report.json"
+fi
+
+exit ${pass}

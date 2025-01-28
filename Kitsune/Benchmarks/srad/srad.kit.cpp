@@ -1,9 +1,36 @@
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <kitsune.h>
 #include <timing.h>
 
+namespace fs = std::filesystem;
 using namespace kitsune;
+
+static size_t check(const std::string &outFile, const std::string &checkFile,
+                    int n) {
+  float epsilon = 1E-12;
+  FILE *fa = fopen(outFile.c_str(), "rb");
+  FILE *fe = fopen(checkFile.c_str(), "rb");
+  float *ev = (float *)malloc(n * sizeof(float));
+  float *av = (float *)malloc(n * sizeof(float));
+
+  fread(ev, sizeof(float), n, fe);
+  fread(av, sizeof(float), n, fa);
+  for (int i = 0; i < n; ++i)
+    if (fabs(ev[i] - av[i]) >= epsilon)
+      return i + 1;
+
+  if (fgetc(fe) != EOF or fgetc(fa) != EOF)
+    return n + 1;
+
+  free(ev);
+  free(av);
+  fclose(fe);
+  fclose(fa);
+
+  return 0;
+}
 
 static void random_matrix(mobile_ptr<float> I, unsigned int rows,
                           unsigned int cols) {
@@ -26,8 +53,9 @@ static void random_matrix(mobile_ptr<float> I, unsigned int rows,
 
 [[noreturn]]
 static void usage(int argc, char **argv) {
-  std::cerr << "Usage: " << argv[0]
-            << " <rows> <cols> <y1> <y2> <x1> <x2> <lambda> <no. of iter>\n";
+  std::cerr << "USAGE: srad <check-file> <rows> <cols> <y1> <y2> <x1> <x2> "
+               "<lambda> <iterations>\n";
+  std::cerr << "\t<check-file>  - File with the expected output\n";
   std::cerr << "\t<rows>        - number of rows\n";
   std::cerr << "\t<cols>        - number of cols\n";
   std::cerr << "\t<y1>          - y1 value of the speckle\n";
@@ -51,23 +79,29 @@ int main(int argc, char *argv[]) {
   float D;
   mobile_ptr<float> c;
   float lambda;
+  std::string checkFile;
+  std::string outFile;
+
   Timer main("main");
   Timer init("init");
   Timer iters("iters");
   Timer loop1("loop1");
   Timer loop2("loop2");
 
-  if (argc == 9) {
-    rows = atoi(argv[1]);   // number of rows in the domain
-    cols = atoi(argv[2]);   // number of cols in the domain
-    r1 = atoi(argv[3]);     // y1 position of the speckle
-    r2 = atoi(argv[4]);     // y2 position of the speckle
-    c1 = atoi(argv[5]);     // x1 position of the speckle
-    c2 = atoi(argv[6]);     // x2 position of the speckle
-    lambda = atof(argv[7]); // Lambda value
-    niter = atoi(argv[8]);  // number of iterations
-  } else if (argc == 1) {
+  outFile = fs::path(argv[0]).filename().string() + ".dat";
+  if (argc == 10) {
+    checkFile = argv[1];         // File containing the expected result
+    rows = std::stoi(argv[2]);   // number of rows in the domain
+    cols = std::stoi(argv[3]);   // number of cols in the domain
+    r1 = std::stoi(argv[4]);     // y1 position of the speckle
+    r2 = std::stoi(argv[5]);     // y2 position of the speckle
+    c1 = std::stoi(argv[6]);     // x1 position of the speckle
+    c2 = std::stoi(argv[7]);     // x2 position of the speckle
+    lambda = std::stof(argv[8]); // Lambda value
+    niter = std::stoi(argv[9]);  // number of iterations
+  } else if (argc == 2) {
     // run with a default configuration.
+    checkFile = argv[1];
     rows = 6400;
     cols = 6400;
     r1 = 0;
@@ -218,16 +252,19 @@ int main(int argc, char *argv[]) {
             << "           Loop2 : " << loop2.total() << " us\n"
             << "----\n\n";
 
-  // TODO: Actually check that the output is correct.
-  size_t errors = 0;
-
-  FILE *fp = fopen("srad-forall-output.dat", "wb");
-  if (fp != NULL) {
+  if (FILE *fp = fopen(outFile.c_str(), "wb")) {
     fwrite((void *)J.get(), sizeof(float), size_I, fp);
     fclose(fp);
   }
 
+  size_t mismatch = check(outFile, checkFile, size_I);
+  std::cout << "\n  Checking final result..." << std::flush;
+  if (mismatch)
+    std::cout << "  FAIL! Output mismatch at byte " << mismatch << "\n\n";
+  else
+    std::cout << "  pass\n\n";
+
   json(std::cout, {main, init, iters, loop1, loop2});
 
-  return 0;
+  return mismatch;
 }
