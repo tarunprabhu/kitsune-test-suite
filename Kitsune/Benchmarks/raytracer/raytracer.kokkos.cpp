@@ -36,6 +36,24 @@ struct Vec {
   }
 };
 
+static size_t check(const std::string &outFile, const std::string &checkFile) {
+  size_t mismatch = 0;
+  if (not checkFile.empty()) {
+    std::ifstream imgActual(outFile);
+    std::ifstream imgExpected(checkFile);
+    while (not imgActual.eof() and not imgExpected.eof()) {
+      char actual, expected;
+      imgActual.get(actual);
+      imgExpected.get(expected);
+      if (actual != expected) {
+        mismatch = imgExpected.tellg();
+        break;
+      }
+    }
+  }
+  return mismatch;
+}
+
 KOKKOS_FORCEINLINE_FUNCTION
 static float randomVal(unsigned int &x) {
   x = (214013 * x + 2531011);
@@ -181,23 +199,18 @@ KOKKOS_FORCEINLINE_FUNCTION static Vec trace(Vec origin, Vec direction,
 }
 
 int main(int argc, char **argv) {
-  Timer main("main");
-  unsigned int sampleCount = 1 << 7;
-  unsigned imageWidth = 1280;
-  unsigned imageHeight = 1024;
-
-  if (argc > 1) {
-    if (argc == 2)
-      sampleCount = atoi(argv[1]);
-    else if (argc == 4) {
-      imageWidth = atoi(argv[2]);
-      sampleCount = atoi(argv[1]);
-      imageHeight = atoi(argv[3]);
-    } else {
-      std::cout << "usage: raytracer [#samples] [img-width img-height]\n";
-      return 1;
-    }
+  if (argc != 5) {
+    std::cerr << "USAGE: raytracer <samples> <width> <height> <check-file>"
+              << std::endl;
+    return 1;
   }
+
+  Timer main("main");
+  unsigned int sampleCount = std::stoi(argv[1]);
+  unsigned int imageWidth = std::stoi(argv[2]);
+  unsigned int imageHeight = std::stoi(argv[3]);
+  std::string checkFile = argv[4];
+  std::string outFile = fs::path(argv[0]).filename().string() + ".ppm";
 
   std::cout << "---- Raytracer benchmark (kokkos) ----\n"
             << "  Image size    : " << imageWidth << "x" << imageHeight << "\n"
@@ -256,13 +269,12 @@ int main(int argc, char **argv) {
     std::cout << "\n\n  Total time: " << us << " us\n";
 
     std::cout << "  Saving image ... " << std::flush;
-    std::ofstream img_file;
-    img_file.open("raytrace-kokkos-no-view.ppm");
-    if (img_file.is_open()) {
-      img_file << "P6 " << imageWidth << " " << imageHeight << " 255 ";
+    std::ofstream imgFile(outFile);
+    if (imgFile.is_open()) {
+      imgFile << "P6 " << imageWidth << " " << imageHeight << " 255 ";
       for (int i = totalPixels - 1; i >= 0; i--)
-        img_file << img[i].r << img[i].g << img[i].b;
-      img_file.close();
+      imgFile << img[i].r << img[i].g << img[i].b;
+      imgFile.close();
     }
     std::cout << "done\n\n";
 
@@ -270,10 +282,14 @@ int main(int argc, char **argv) {
   }
   Kokkos::finalize();
 
-  // TODO: Actually check that the result is correct.
-  size_t errors = 0;
+  std::cout << "\n  Checking final result..." << std::flush;
+  size_t mismatch = check(outFile, checkFile);
+  if (mismatch)
+    std::cout << "  FAIL! (Mismatch at byte " << mismatch << ")\n\n";
+  else
+    std::cout << "  pass\n\n";
 
   json(std::cout, {main});
 
-  return errors;
+  return mismatch;
 }

@@ -2,9 +2,11 @@
 // This code is from the AIAA-2009-4001 paper
 
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <kitsune.h>
+#include <string>
 #include <timing.h>
 
 struct Float3 {
@@ -38,7 +40,134 @@ struct Float3 {
 #define __restrict
 #endif
 
+namespace fs = std::filesystem;
 using namespace kitsune;
+
+static bool check(const std::string &out_file, const std::string &check_file) {
+  float epsilon = 1E-12;
+  char ec, ac;
+
+  FILE *fa = fopen(out_file.c_str(), "rb");
+  FILE *fe = fopen(check_file.c_str(), "rb");
+
+  int enel, anel;
+  int enelr, anelr;
+  fread(&enel, sizeof(int), 1, fe);
+  fread(&enelr, sizeof(int), 1, fe);
+  fread(&anel, sizeof(int), 1, fa);
+  fread(&anelr, sizeof(int), 1, fa);
+  if (anel != enel or anelr != enelr)
+    return false;
+
+  float *ev = (float *)malloc(sizeof(float) * enel);
+  float *av = (float *)malloc(sizeof(float) * anel);
+
+  // Density
+  fread(&ec, sizeof(char), 1, fe);
+  fread(&ac, sizeof(char), 1, fa);
+  if (ac != ec)
+    return false;
+
+  fread(ev, sizeof(float), enel, fe);
+  fread(av, sizeof(float), anel, fa);
+  for (int i = 0; i < enel; ++i)
+    if (fabs(ev[i] - av[i]) >= epsilon)
+      return false;
+
+  // Momentum
+  fread(&ec, sizeof(char), 1, fe);
+  fread(&ac, sizeof(char), 1, fa);
+  if (ac != ec)
+    return false;
+
+  for (int j = 0; j < NDIM; ++j) {
+    fread(ev, sizeof(float), enel, fe);
+    fread(av, sizeof(float), anel, fa);
+    for (int i = 0; i < enel; ++i)
+      if (fabs(ev[i] - av[i]) >= epsilon)
+        return false;
+  }
+
+  // Density_energy
+  fread(&ec, sizeof(char), 1, fe);
+  fread(&ac, sizeof(char), 1, fa);
+  if (ac != ec)
+    return false;
+
+  fread(ev, sizeof(float), enel, fe);
+  fread(av, sizeof(float), anel, fa);
+  for (int i = 0; i < enel; ++i)
+    if (fabs(ev[i] - av[i]) >= epsilon)
+      return false;
+
+  if (fgetc(fe) != EOF or fgetc(fa) != EOF)
+    return false;
+
+  free(ev);
+  free(av);
+  fclose(fe);
+  fclose(fa);
+
+  return true;
+}
+
+static void dump(const std::string &out_file, mobile_ptr<float> variables,
+                 int nel, int nelr) {
+  FILE *fp = fopen(out_file.c_str(), "wb");
+  char type;
+
+  fwrite(&nel, sizeof(int), 1, fp);
+  fwrite(&nelr, sizeof(int), 1, fp);
+
+  type = 'D';
+  fwrite(&type, sizeof(char), 1, fp);
+  fwrite(&variables[VAR_DENSITY * nelr], sizeof(float), nel, fp);
+
+  type = 'M';
+  fwrite(&type, sizeof(char), 1, fp);
+  for (int j = 0; j < NDIM; j++)
+    fwrite(&variables[(VAR_MOMENTUM + j) * nelr], sizeof(float), nel, fp);
+
+  type = 'E';
+  fwrite(&type, sizeof(char), 1, fp);
+  fwrite(&variables[VAR_DENSITY_ENERGY * nelr], sizeof(float), nel, fp);
+
+  fclose(fp);
+}
+
+static void dumpText(const std::string& out_file, mobile_ptr<float> variables,
+                     int nel, int nelr) {
+  FILE* fp = fopen(out_file.c_str(), "wt");
+  char type;
+
+  fprintf(fp, "%d %d\n", nelr, nelr);
+
+  fprintf(fp, "%c\n", 'D');
+  for (int i = 0; i < nel; ++i) {
+    if (i)
+      fprintf(fp, " ");
+    fprintf(fp, "%.6g", variables[i + VAR_DENSITY * nelr]);
+  }
+  fprintf(fp, "\n");
+
+  fprintf(fp, "%c\n", 'M');
+  for (int i = 0; i < nel; ++i) {
+    for (int j = 0; j < NDIM; ++j) {
+      if (j)
+        fprintf(fp, " ");
+      fprintf(fp, "%.6g", variables[i + (VAR_MOMENTUM + j) * nelr]);
+    }
+    fprintf(fp, "\n");
+  }
+
+  fprintf(fp, "%c\n", 'E');
+  for (int i = 0; i < nel; ++i) {
+    if (i)
+      fprintf(fp, " ");
+    fprintf(fp, "%.6g", variables[i + VAR_DENSITY_ENERGY * nelr]);
+  }
+  fprintf(fp, "\n");
+}
 
 inline __attribute__((always_inline)) static void
 cpy(mobile_ptr<float> dst, const mobile_ptr<float> src, int N) {
@@ -47,32 +176,6 @@ cpy(mobile_ptr<float> dst, const mobile_ptr<float> src, int N) {
     dst[i] = src[i];
   }
   // clang-format on
-}
-
-static void dump(mobile_ptr<float> variables, int nel, int nelr) {
-  {
-    std::ofstream file("density-forall.dat");
-    file << nel << " " << nelr << std::endl;
-    for (int i = 0; i < nel; i++)
-      file << variables[i + VAR_DENSITY * nelr] << std::endl;
-  }
-
-  {
-    std::ofstream file("momentum-forall.dat");
-    file << nel << " " << nelr << std::endl;
-    for (int i = 0; i < nel; i++) {
-      for (int j = 0; j != NDIM; j++)
-        file << variables[i + (VAR_MOMENTUM + j) * nelr] << " ";
-      file << std::endl;
-    }
-  }
-
-  {
-    std::ofstream file("density_energy-forall.dat");
-    file << nel << " " << nelr << std::endl;
-    for (int i = 0; i < nel; i++)
-      file << variables[i + VAR_DENSITY_ENERGY * nelr] << std::endl;
-  }
 }
 
 inline __attribute__((always_inline)) static void
@@ -382,14 +485,16 @@ static void time_step(int j, int nelr, mobile_ptr<float> old_variables,
  * Main function
  */
 int main(int argc, char **argv) {
-  if (argc < 2) {
-    std::cout << "specify data file name" << std::endl;
-    return 0;
+  if (argc != 4) {
+    std::cerr << "USAGE: euler3d <iterations> <infile> <check-file>"
+              << std::endl;
+    return 1;
   }
 
-  int iterations = 4000;
-  if (argc > 2)
-    iterations = atoi(argv[2]);
+  int iterations = std::stoi(argv[1]);
+  std::string in_file = argv[2];
+  std::string check_file = argv[3];
+  std::string out_file = fs::path(argv[0]).filename().string() + ".dat";
 
   Timer main("main");
   Timer init("init");
@@ -398,11 +503,9 @@ int main(int argc, char **argv) {
   Timer sf("step_factor");
   Timer rk("rk");
 
-  const char *data_file_name = argv[1];
-
   std::cout << "\n";
   std::cout << "---- euler3d benchmark (forall) ----\n\n"
-            << "  Input file : " << data_file_name << "\n"
+            << "  Input file : " << in_file << "\n"
             << "  Iterations : " << iterations << ".\n\n";
 
   std::cout
@@ -459,7 +562,7 @@ int main(int argc, char **argv) {
   mobile_ptr<int> elements_surrounding_elements;
   mobile_ptr<float> normals;
 
-  std::ifstream file(data_file_name);
+  std::ifstream file(in_file);
   file >> nel;
   nelr =
       block_length * ((nel / block_length) + std::min(1, nel % block_length));
@@ -538,7 +641,7 @@ int main(int argc, char **argv) {
   iters.stop();
   main.stop();
 
-  dump(variables, nel, nelr);
+  dump(out_file, variables, nel, nelr);
 
   std::cout << "\n"
             << "      Total time : " << main.total() << " us\n"
@@ -549,8 +652,12 @@ int main(int argc, char **argv) {
             << "              rk : " << rk.total() << " us\n"
             << "----\n\n";
 
-  // TODO: Actually check that the result is correct
-  size_t errors = 0;
+  bool errors = not check(out_file, check_file);
+  std::cout << "\n  Checking final result..." << std::flush;
+  if (errors)
+    std::cout << "  FAIL! Output mismatch\n\n";
+  else
+    std::cout << "  pass\n\n";
 
   json(std::cout, {main, init, iters, copy, sf, rk});
 
@@ -563,5 +670,5 @@ int main(int argc, char **argv) {
   fluxes.free();
   step_factors.free();
 
-  return 0;
+  return errors;
 }
