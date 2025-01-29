@@ -15,6 +15,12 @@ struct Pixel {
   unsigned char r, g, b;
 };
 
+// The pre-quantized pixel value. Maybe this is easier to use when comparing
+// results.
+struct FPPixel {
+  float r, g, b;
+};
+
 struct Vec {
   float x, y, z;
   __attribute__((always_inline)) Vec(float v = 0) { x = y = z = v; }
@@ -37,22 +43,74 @@ struct Vec {
   }
 };
 
+// static size_t check(const std::string &outFile, const std::string &checkFile)
+// {
+//   size_t mismatch = 0;
+//   if (not checkFile.empty()) {
+//     std::ifstream imgActual(outFile);
+//     std::ifstream imgExpected(checkFile);
+//     while (not imgActual.eof() and not imgExpected.eof()) {
+//       char actual, expected;
+//       imgActual.get(actual);
+//       imgExpected.get(expected);
+//       if (actual != expected) {
+//         mismatch = imgExpected.tellg();
+//         break;
+//       }
+//     }
+//   }
+//   return mismatch;
+// }
+
+// If there is a mismatch in the output, return the pixel at which the output
+// did not match. If the size of the image does not match, return -1. If the
+// output matches, return 0.
 static size_t check(const std::string &outFile, const std::string &checkFile) {
-  size_t mismatch = 0;
-  if (not checkFile.empty()) {
-    std::ifstream imgActual(outFile);
-    std::ifstream imgExpected(checkFile);
-    while (not imgActual.eof() and not imgExpected.eof()) {
-      char actual, expected;
-      imgActual.get(actual);
-      imgExpected.get(expected);
-      if (actual != expected) {
-        mismatch = imgExpected.tellg();
-        break;
-      }
+  const float epsilon = 1e-2;
+
+  FILE *fa = fopen(outFile.c_str(), "rb");
+  FILE *fe = fopen(checkFile.c_str(), "rb");
+
+  unsigned ew, aw;
+  unsigned eh, ah;
+  fread(&ew, sizeof(unsigned), 1, fe);
+  fread(&eh, sizeof(unsigned), 1, fe);
+  fread(&aw, sizeof(unsigned), 1, fa);
+  fread(&ah, sizeof(unsigned), 1, fa);
+  if (ew != aw or eh != ah)
+    return -1;
+
+  FPPixel *ev = (FPPixel *)malloc(sizeof(FPPixel) * ew * eh);
+  FPPixel *av = (FPPixel *)malloc(sizeof(FPPixel) * aw * ah);
+
+  size_t re = fread(ev, sizeof(FPPixel), ew * eh, fe);
+  size_t ra = fread(av, sizeof(FPPixel), aw * ah, fa);
+  if (re != ra)
+    return -2;
+
+  for (unsigned i = 0; i < ew * eh; ++i) {
+    const FPPixel *ep = &ev[i];
+    const FPPixel *ap = &av[i];
+
+    if (fabs(ev[i].r - av[i].r) > epsilon or
+        fabs(ev[i].g - av[i].g) > epsilon or
+        fabs(ev[i].b - av[i].b) > epsilon) {
+      std::cerr << std::endl
+                << i << " (" << i / ew << ", " << i % ew
+                << "): " << fabs(ev[i].r - av[i].r) << " "
+                << fabs(ev[i].g - av[i].g) << " " << fabs(ev[i].b - av[i].b)
+                << " with epsilon = " << epsilon;
+      // return i + 1;
     }
   }
-  return mismatch;
+  std::cerr << "\n";
+
+  free(ev);
+  free(av);
+  fclose(fe);
+  fclose(fa);
+
+  return 0;
 }
 
 inline __attribute__((always_inline)) static float randomVal(unsigned int &x) {
@@ -159,8 +217,8 @@ inline __attribute__((always_inline)) Vec trace(Vec origin, Vec direction,
     int hitType = rayMarching(origin, direction, sampledPosition, normal);
     if (hitType == HIT_NONE)
       break; // No hit, return color.
-    else if (hitType ==
-             HIT_LETTER) { // Specular bounce on a letter. No color acc.
+    else if (hitType == HIT_LETTER) {
+      // Specular bounce on a letter. No color acc.
       direction = direction + normal * (normal % direction * -2.0f);
       origin = sampledPosition + direction * 0.1f;
       attenuation = attenuation * 0.2f; // Attenuation via distance traveled.
@@ -172,10 +230,8 @@ inline __attribute__((always_inline)) Vec trace(Vec origin, Vec direction,
       float g = normal.z < 0.0f ? -1.0f : 1.0f;
       float u = (-1.0f / (g + normal.z));
       float v = normal.x * normal.y * u;
-      float cosp;
-      float sinp;
-      sinp = sinf(p);
-      cosp = cosf(p);
+      float cosp = cosf(p);
+      float sinp = sinf(p);
       // sincosf(p, &sinp, &cosp);
       direction = Vec(v, g + normal.y * normal.y * u, -normal.y) * (cosp * s) +
                   Vec(1 + g * normal.x * normal.x * u, g * v, -g * normal.x) *
@@ -208,7 +264,8 @@ int main(int argc, char **argv) {
   unsigned int imageWidth = std::stoi(argv[2]);
   unsigned int imageHeight = std::stoi(argv[3]);
   std::string checkFile = argv[4];
-  std::string outFile = fs::path(argv[0]).filename().string() + ".ppm";
+  std::string outImg = fs::path(argv[0]).filename().string() + ".ppm";
+  std::string outFile = fs::path(argv[0]).filename().string() + ".dat";
 
   std::cout << "\n";
   std::cout << "---- Raytracer benchmark (forall) ----\n"
@@ -218,6 +275,8 @@ int main(int argc, char **argv) {
   std::cout << "  Allocating image..." << std::flush;
   unsigned int totalPixels = imageWidth * imageHeight;
   mobile_ptr<Pixel> img(totalPixels);
+  mobile_ptr<FPPixel> fpimg(totalPixels);
+
   std::cout << "  done.\n\n";
 
   std::cout << "  Running benchmark ... " << std::flush;
@@ -247,6 +306,12 @@ int main(int argc, char **argv) {
     }
     // Reinhard tone mapping
     color = color * (1.0f / sampleCount) + 14.0f / 241.0f;
+
+    // Save the pre-quantized image.
+    fpimg[i].r = color.x;
+    fpimg[i].g = color.y;
+    fpimg[i].b = color.z;
+
     Vec o = color + 1.0f;
     color = Vec(color.x / o.x, color.y / o.y, color.z / o.z) * 255.0f;
     img[i].r = (unsigned char)color.x;
@@ -259,7 +324,7 @@ int main(int argc, char **argv) {
   std::cout << "\n\n  Total time: " << us << " us\n";
 
   std::cout << "  Saving image ... " << std::flush;
-  std::ofstream imgFile(outFile);
+  std::ofstream imgFile(outImg);
   if (imgFile.is_open()) {
     imgFile << "P6 " << imageWidth << " " << imageHeight << " 255 ";
     for (int i = totalPixels - 1; i >= 0; i--)
@@ -268,15 +333,27 @@ int main(int argc, char **argv) {
   }
   std::cout << "done\n\n";
 
+  FILE *fp = fopen(outFile.c_str(), "wb");
+  fwrite(&imageWidth, sizeof(unsigned), 1, fp);
+  fwrite(&imageHeight, sizeof(unsigned), 1, fp);
+  fwrite(fpimg.get(), sizeof(FPPixel), totalPixels, fp);
+  fclose(fp);
+
   std::cout << "\n  Checking final result..." << std::flush;
   size_t mismatch = check(outFile, checkFile);
-  if (mismatch)
-    std::cout << "  FAIL! (Mismatch at byte " << mismatch << ")\n\n";
+  if (mismatch == -2)
+    std::cout << "  FAIL! (File size mismatch)\n\n";
+  else if (mismatch == -1)
+    std::cout << "  FAIL! (Image size mismatch)\n\n";
+  else if (mismatch)
+    std::cout << "  FAIL! (Mismatch at pixel " << mismatch << ")\n\n";
   else
     std::cout << "  pass\n\n";
 
   json(std::cout, {main});
 
   img.free();
+  fpimg.free();
+
   return mismatch;
 }

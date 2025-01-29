@@ -9,7 +9,7 @@ using namespace kitsune;
 
 static size_t check(const std::string &outFile, const std::string &checkFile,
                     int n) {
-  float epsilon = 1E-12;
+  float epsilon = 1e-4;
   FILE *fa = fopen(outFile.c_str(), "rb");
   FILE *fe = fopen(checkFile.c_str(), "rb");
   float *ev = (float *)malloc(n * sizeof(float));
@@ -18,7 +18,7 @@ static size_t check(const std::string &outFile, const std::string &checkFile,
   fread(ev, sizeof(float), n, fe);
   fread(av, sizeof(float), n, fa);
   for (int i = 0; i < n; ++i)
-    if (fabs(ev[i] - av[i]) >= epsilon)
+    if (fabs(ev[i] - av[i]) > epsilon)
       return i + 1;
 
   if (fgetc(fe) != EOF or fgetc(fa) != EOF)

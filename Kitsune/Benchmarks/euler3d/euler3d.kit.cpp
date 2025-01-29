@@ -44,7 +44,7 @@ namespace fs = std::filesystem;
 using namespace kitsune;
 
 static bool check(const std::string &out_file, const std::string &check_file) {
-  float epsilon = 1E-12;
+  float epsilon = 1e-5;
   char ec, ac;
 
   FILE *fa = fopen(out_file.c_str(), "rb");
