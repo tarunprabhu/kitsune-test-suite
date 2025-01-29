@@ -1,32 +1,53 @@
 #!/usr/bin/env sh
 #
+# The main reason this exists is to pass -j 1 to lit in order to run the tests.
+# By default, lit runs tests in parallel, but we cannot do that. Some CPU tapir
+# targets like OpenCilk will use all the cores on the system by default. Running
+# tests in parallel under such conditions is usually undesirable. Similarly,
+# running the tests with GPU tapir targets in parallel will cause contention on
+# the GPU which is not ideal either. It may be ok on a multi-gpu system, but for
+# now, we don't check for that. The user can always use lit directly in those
+# cases.
+#
 # There might be some way of passing options to lit via a config file, but I
 # haven't found it if it exists. This script cannot be used on Windows, but we
 # don't support Windows in Kitsune anyway.
+#
+# This script has since expanded to also record the hardware details on the
+# system where this was run and collating interesting compile and execution
+# time statistics. Some of these are reports from the tests themselves.
 
-usage="
-Run the Kitsune tests. This passes the right options to lit.
+usage="run-tests [OPTIONS]
+Try run-tests -h for more information"
 
-  USAGE
+help="
+Run the Kitsune tests. This passes the right options to lit, records information
+about the platform on which the tests are run (number and type of GPU's, CPU
+core count etc) and combines useful compile and execution time statistics into
+a single, more concise, report.
 
-      run-tests [-b <dir>][-h]
+USAGE
 
-  OPTIONS
+    run-tests [OPTIONS]
 
-      -h          Show help and exit
+OPTIONS
 
-      -o <file>   Where to write the combined report. If this is not given, it
-                  will be written to report.json in the Kistune/ subdirectory of
-                  the test suite
+    -h          Show help and exit
 
-      -b <dir>    The Kitsune build directory. This is useful if we strictly
-                  need the llvm-lit executable that is present there. Otherwise,
-                  the lit executable from $PATH will be used
+    -o <file>   Where to write the combined report. If this is not given, it
+                will be written to report.json in the Kistune/ subdirectory of
+                the test suite
+
+    -b <dir>    The Kitsune build directory. This is useful if we strictly
+                need the llvm-lit executable that is present there. Otherwise,
+                the lit executable from $PATH will be used
 "
 
 # This will be the Kitsune/ subdirectory within the root of the llvm-test-suite
 # build directory
 kitsune=$(dirname $0)
+
+# The root of the llvm-test-suite build directory.
 test_suite=$(dirname "${kitsune}")
 
 build_dir=""
@@ -38,11 +59,15 @@ while getopts "b:ho:" opt; do
             build_dir="${OPTARG}"
             ;;
         h)
-            echo "${usage}"
+            echo "${help}"
             exit 0
             ;;
         o)
             outfile="${OPTARG}"
+            ;;
+        *)
+            echo "${usage}"
+            exit 1
             ;;
     esac
 done
@@ -59,13 +84,6 @@ if [ -z "${lit}" ] || ! [ -x "${lit}" ]; then
     exit 1
 fi
 
-# The kitsune tests must be run sequentially. Some CPU tapir targets like
-# OpenCilk will use all the cores on the system by default. Running tests in
-# parallel under such conditions is usually undesirable. Similarly, running the
-# tests with GPU tapir targets in parallel will cause contention on the GPU
-# which is not ideal either. It may be ok on a multi-gpu system, but for now, we
-# don't check for that. The user can always use lit directly in those cases.
-#
 # TODO: It is not clear that we need NO_STOP_MESSAGE=1 for the Fortran tests,
 # but keep it for now. We will definitely want to revisit this at some point.
 NO_STOP_MESSAGE=1 ${lit} -j 1 -o ${kitsune}/ts-report.json ${kitsune}
@@ -89,18 +107,14 @@ if ls -l /proc/cpuinfo >/dev/null 2>&1; then
         sed 's/processor\s*:\s*//g' |
         wc -l)
 else
-    echo "Looking up CPU info on non-Linux platforms not implemented"
+    echo "Looking up CPU info on non-Linux platforms is not implemented"
 fi
 
 nvidia_smi=$(command -v nvidia-smi)
-if [ $? -ne 0 ]; then
-    nvidia_smi=""
-fi
+[ $? -ne 0 ] && nvidia_smi=""
 
 rocm_smi=$(command -v rocm-smi)
-if [ $? -ne 0 ]; then
-    rocm_smi=""
-fi
+[ $? -ne 0 ] && rocm_smi=""
 
 # There could be more than one GPU on the machine. It would be good to determine
 # which one was actually used, but at the time of writing, we cannot. It is
@@ -113,34 +127,34 @@ gpu=""
 devices=0
 if [ -n "${nvidia_smi}" ]; then
     gpus=$(nvidia-smi -L | wc -l)
-    nvidia=$(nvidia-smi -L |
-        sed -E 's/GPU[ ]*[0-9]+:[ ]*//g' |
-        sed -E 's/[ ]*[(]UUID:[ ]*.+[)]//g' |
-        sort |
-        uniq |
-        tr '\n' ';' |
-        sed -E 's/;$//g')
-    if [ -n "${gpu}" ]; then
-        gpu="${gpu};"
+    if [ $? -eq 0 ]; then
+        nvidia=$(nvidia-smi -L |
+            sed -E 's/GPU[ ]*[0-9]+:[ ]*//g' |
+            sed -E 's/[ ]*[(]UUID:[ ]*.+[)]//g' |
+            sort |
+            uniq |
+            tr '\n' ';' |
+            sed -E 's/;$//g')
+        [ -n "${gpu}" ] && gpu="${gpu}"
+        gpu="${gpu}${nvidia}"
+        devices=$((devices + gpus))
     fi
-    gpu="${gpu}${nvidia}"
-    devices=$(echo "${devices} + ${gpus}" | bc)
 fi
 if [ -n "${rocm_smi}" ]; then
-    gpus=$(rocm-smi -i | wc -l)
-    amd=$(rocm-smi -i |
-        grep "Device Name" |
-        awk -F':' '{print $3;}' |
-        sed -E 's/^\s*//g' |
-        sort |
-        uniq |
-        tr '\n' ';' |
-        sed -E 's/;$//g')
-    if [ -n "${gpu}" ]; then
-        gpu="${gpu};"
+    gpus=$(rocm-smi -i 2> /dev/null | wc -l)
+    if [ ${gpus} -ne 0 ]; then
+        amd=$(rocm-smi -i |
+            grep "Device Name" |
+            awk -F':' '{print $3;}' |
+            sed -E 's/^\s*//g' |
+            sort |
+            uniq |
+            tr '\n' ';' |
+            sed -E 's/;$//g')
+        [ -n "${gpu}" ] && gpu="${gpu}"
+        gpu="${gpu}${amd}"
+        devices=$((devices + gpus))
     fi
-    gpu="${gpu}${amd}"
-    devices=$(echo "${devices} + ${gpus}" | bc)
 fi
 
 date=$(date --rfc-3339=seconds)
@@ -164,7 +178,7 @@ echo "${platform}" >${kitsune}/platform.json
 if [ ${pass} -eq 0 ]; then
     # Generate the combined report. There is no reason to do this as a separate
     # step. It can always be done separately if needed. The -b option must be
-    # given the root of the test suite. The test
+    # given the root of the test suite.
     ${kitsune}/utils/kit-combine \
         -b "${test_suite}" \
         -o "${outfile}" \

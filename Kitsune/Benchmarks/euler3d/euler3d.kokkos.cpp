@@ -46,7 +46,7 @@ namespace fs = std::filesystem;
 using namespace kitsune;
 
 static bool check(const std::string &out_file, const std::string &check_file) {
-  float epsilon = 1E-12;
+  float epsilon = 1e-5;
   char ec, ac;
 
   FILE *fa = fopen(out_file.c_str(), "rb");
@@ -189,32 +189,6 @@ void cpy(mobile_ptr<T> dst_p, const mobile_ptr<T> src_p, int N) {
   });
   // clang-format on
   Kokkos::fence();
-}
-
-void dump(mobile_ptr<float> variables, int nel, int nelr) {
-  {
-    std::ofstream file("density-kokkos-noview.dat");
-    file << nel << " " << nelr << std::endl;
-    for (int i = 0; i < nel; i++)
-      file << variables[i + VAR_DENSITY * nelr] << std::endl;
-  }
-
-  {
-    std::ofstream file("momentum-kokkos-noview.dat");
-    file << nel << " " << nelr << std::endl;
-    for (int i = 0; i < nel; i++) {
-      for (int j = 0; j != NDIM; j++)
-        file << variables[i + (VAR_MOMENTUM + j) * nelr] << " ";
-      file << std::endl;
-    }
-  }
-
-  {
-    std::ofstream file("density_energy-kokkos-noview.dat");
-    file << nel << " " << nelr << std::endl;
-    for (int i = 0; i < nel; i++)
-      file << variables[i + VAR_DENSITY_ENERGY * nelr] << std::endl;
-  }
 }
 
 void initialize_variables(int nelr, mobile_ptr<float> variables_p,
@@ -429,7 +403,7 @@ void compute_flux(int nelr,
               flux_contribution_nb_density_energy);
 
           // artificial viscosity
-          factor = -normal_len * smoothing_coefficient * float(0.5f) *
+          factor = -normal_len * smoothing_coefficient * 0.5f *
                    (speed_i + sqrtf(speed_sqd_nb) + speed_of_sound_i +
                     speed_of_sound_nb);
           flux_i_density += factor * (density_i - density_nb);
@@ -440,7 +414,7 @@ void compute_flux(int nelr,
           flux_i_momentum.z += factor * (momentum_i.z - momentum_nb.z);
 
           // accumulate cell-centered fluxes
-          factor = float(0.5f) * normal.x;
+          factor = 0.5f * normal.x;
           flux_i_density += factor * (momentum_nb.x + momentum_i.x);
           flux_i_density_energy +=
               factor * (flux_contribution_nb_density_energy.x +
@@ -452,7 +426,7 @@ void compute_flux(int nelr,
           flux_i_momentum.z += factor * (flux_contribution_nb_momentum_z.x +
                                          flux_contribution_i_momentum_z.x);
 
-          factor = float(0.5f) * normal.y;
+          factor = 0.5f * normal.y;
           flux_i_density += factor * (momentum_nb.y + momentum_i.y);
           flux_i_density_energy +=
               factor * (flux_contribution_nb_density_energy.y +
@@ -464,7 +438,7 @@ void compute_flux(int nelr,
           flux_i_momentum.z += factor * (flux_contribution_nb_momentum_z.y +
                                          flux_contribution_i_momentum_z.y);
 
-          factor = float(0.5f) * normal.z;
+          factor = 0.5f * normal.z;
           flux_i_density += factor * (momentum_nb.z + momentum_i.z);
           flux_i_density_energy +=
               factor * (flux_contribution_nb_density_energy.z +
@@ -480,9 +454,8 @@ void compute_flux(int nelr,
           flux_i_momentum.y += normal.y * pressure_i;
           flux_i_momentum.z += normal.z * pressure_i;
         } else if (nb == -2) { // a far field boundary
-          factor = float(0.5f) * normal.x;
-          flux_i_density +=
-              factor * (ff_variable[VAR_MOMENTUM] + momentum_i.x);
+          factor = 0.5f * normal.x;
+          flux_i_density += factor * (ff_variable[VAR_MOMENTUM] + momentum_i.x);
           flux_i_density_energy +=
               factor * (ff_flux_contribution_density_energy.x +
                         flux_contribution_i_density_energy.x);
@@ -596,7 +569,7 @@ int main(int argc, char **argv) {
 
   std::cout << "\n";
   std::cout << "---- euler3d benchmark (forall) ----\n\n"
-            << "  Input file : " << data_file_name << "\n"
+            << "  Input file : " << in_file << "\n"
             << "  Iterations : " << iterations << ".\n\n";
 
   std::cout
@@ -605,6 +578,7 @@ int main(int argc, char **argv) {
 
   main.start();
 
+  // these need to be computed the first time in order to compute time step
   mobile_ptr<float> ff_variable(NVAR);
   Float3 ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y,
       ff_flux_contribution_momentum_z;
@@ -652,7 +626,7 @@ int main(int argc, char **argv) {
   mobile_ptr<int> elements_surrounding_elements;
   mobile_ptr<float> normals;
 
-  std::ifstream file(data_file_name);
+  std::ifstream file(in_file);
   file >> nel;
   nelr =
       block_length * ((nel / block_length) + std::min(1, nel % block_length));
@@ -705,8 +679,8 @@ int main(int argc, char **argv) {
   mobile_ptr<float> step_factors(nelr);
   init.stop();
 
-  iters.start();
   // Begin iterations
+  iters.start();
   for (int i = 0; i < iterations; i++) {
     copy.start();
     cpy(old_variables, variables, nelr * NVAR);

@@ -3,11 +3,13 @@
 #include "Kokkos_Core.hpp"
 
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <kitsune.h>
 #include <timing.h>
 
+namespace fs = std::filesystem;
 using namespace kitsune;
 
 struct Pixel {

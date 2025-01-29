@@ -90,7 +90,11 @@ function (register_test target tapir_target cmdargs data)
   # automatically, or if we resort to creating a multi-target fat binary with
   # a range of sm versions supported, this can (and should) go away
   if (tapir_target STREQUAL "cuda" AND NOT KITSUNE_NVARCH STREQUAL "")
-    target_compile_options(${target} PUBLIC "-ftapir-nvarch=${KITSUNE_NVARCH}")
+    # FIXME: Current, -ftapir-nvarch does not seem to be correctly wired up
+    # inside Kitsune, so we need to use -mllvm cuabi-arch to get the right value
+    # all the way through. We should fix -ftapir-nvarch eventually, but till
+    # then, do it this way.
+    target_compile_options(${target} PUBLIC -mllvm -cuabi-arch=${KITSUNE_NVARCH})
   endif ()
 endfunction ()
 
