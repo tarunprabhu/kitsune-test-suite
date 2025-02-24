@@ -1,88 +1,50 @@
 // Straightforward memory copy
 
 #include "Kokkos_Core.hpp"
-
 #include <iostream>
 #include <kitsune.h>
 #include <timing.h>
 
+using ElementType = float;
 using namespace kitsune;
 
-template <typename T> static void random_fill(mobile_ptr<T> arr, size_t n) {
-  for (size_t i = 0; i < n; ++i)
-    arr[i] = rand() / (T)RAND_MAX;
-}
+#include "copy.inc"
 
-template <typename T>
-static size_t check(const mobile_ptr<T> src, const mobile_ptr<T> dst,
-                    size_t n) {
-  size_t errors;
-  for (size_t i = 0; i < n; ++i) {
-    if (src[i] != dst[i])
-      errors += 1;
-  }
-  return errors;
-}
+int main(int argc, char *argv[]) {
+  size_t n;
+  unsigned iterations;
+  mobile_ptr<ElementType> dst;
+  mobile_ptr<ElementType> src;
+  TimerGroup tg("copy");
+  Timer &timer = tg.add("copy");
+  size_t errors = 0;
 
-int main(int argc, char **argv) {
-  size_t size = 1024 * 1024 * 256;
-  unsigned int iterations = 10;
-  if (argc > 1)
-    size = atol(argv[1]);
-  if (argc > 2)
-    iterations = atoi(argv[2]);
-  Timer timer("copy");
-  int retcode = 0;
-
-  std::cout << "\n";
-  std::cout << "---- Simple copy benchmark (forall) ----\n"
-            << "  Array size: " << size << "\n"
-            << "  Iterations: " << iterations << "\n\n";
-  std::cout << "Allocating arrays and filling with random values..."
-            << std::flush;
+  parseCommandLineInto(argc, argv, n, iterations);
   Kokkos::initialize(argc, argv);
   {
-    mobile_ptr<float> src(size);
-    mobile_ptr<float> dst(size);
-    random_fill(src, size);
-    std::cout << "  done.\n\n";
+    header("kokkos", dst, src, n);
 
-    // FIXME: Simply using dst and src in the Kokkos lambda does not compile.
-    // The Kokkos are, unsurprisingly, utterly useless. For now, this works,
-    // so we will leave it like this. This should eventually be changed to use
-    // attributed pointers instead, which should work like the regular
-    // pointers and, hopefully, keep Kokkos happy.
-    float* bufs = src.get();
-    float* bufd = dst.get();
+    // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
+    // We could try to find a way to make that type Kokkos-friendly, or just
+    // wait until the [[kitsune::mobile_ptr]] attribute is implemented which
+    // should make Kokkos happy.
+    ElementType *[[kitsune::mobile]] bufd = dst.get();
+    ElementType *[[kitsune::mobile]] bufs = src.get();
 
-    std::cout << "Starting benchmark...\n";
-
-    for (int t = 0; t < iterations; t++) {
+    for (unsigned t = 0; t < iterations; t++) {
       timer.start();
       // clang-format off
-      Kokkos::parallel_for(size, KOKKOS_LAMBDA(const int i) {
+      Kokkos::parallel_for(n, KOKKOS_LAMBDA(const int i) {
         bufd[i] = bufs[i];
       });
       // clang-format on
       uint64_t us = timer.stop();
-      std::cout << "\t" << t << ". iteration time: " << us << " us\n";
+      std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
     }
 
-    std::cout << "\n  Checking final result..." << std::flush;
-    size_t errors = check(src, dst, size);
-    if (errors)
-      std::cout << "  FAIL! (" << errors << " errors found)\n\n";
-    else
-      std::cout << "  pass\n\n";
-
-    json(std::cout, {timer});
-
-    src.free();
-    dst.free();
-
-    retcode = errors;
+    errors = footer(tg, dst, src, n);
   }
   Kokkos::finalize();
 
-  return retcode;
+  return errors;
 }

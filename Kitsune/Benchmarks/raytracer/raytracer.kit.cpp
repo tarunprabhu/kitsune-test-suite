@@ -43,75 +43,74 @@ struct Vec {
   }
 };
 
-// static size_t check(const std::string &outFile, const std::string &checkFile)
-// {
-//   size_t mismatch = 0;
-//   if (not checkFile.empty()) {
-//     std::ifstream imgActual(outFile);
-//     std::ifstream imgExpected(checkFile);
-//     while (not imgActual.eof() and not imgExpected.eof()) {
-//       char actual, expected;
-//       imgActual.get(actual);
-//       imgExpected.get(expected);
-//       if (actual != expected) {
-//         mismatch = imgExpected.tellg();
-//         break;
-//       }
-//     }
-//   }
-//   return mismatch;
-// }
-
-// If there is a mismatch in the output, return the pixel at which the output
-// did not match. If the size of the image does not match, return -1. If the
-// output matches, return 0.
-static size_t check(const std::string &outFile, const std::string &checkFile) {
-  const float epsilon = 1e-2;
-
-  FILE *fa = fopen(outFile.c_str(), "rb");
-  FILE *fe = fopen(checkFile.c_str(), "rb");
-
-  unsigned ew, aw;
-  unsigned eh, ah;
-  fread(&ew, sizeof(unsigned), 1, fe);
-  fread(&eh, sizeof(unsigned), 1, fe);
-  fread(&aw, sizeof(unsigned), 1, fa);
-  fread(&ah, sizeof(unsigned), 1, fa);
-  if (ew != aw or eh != ah)
-    return -1;
-
-  FPPixel *ev = (FPPixel *)malloc(sizeof(FPPixel) * ew * eh);
-  FPPixel *av = (FPPixel *)malloc(sizeof(FPPixel) * aw * ah);
-
-  size_t re = fread(ev, sizeof(FPPixel), ew * eh, fe);
-  size_t ra = fread(av, sizeof(FPPixel), aw * ah, fa);
-  if (re != ra)
-    return -2;
-
-  for (unsigned i = 0; i < ew * eh; ++i) {
-    const FPPixel *ep = &ev[i];
-    const FPPixel *ap = &av[i];
-
-    if (fabs(ev[i].r - av[i].r) > epsilon or
-        fabs(ev[i].g - av[i].g) > epsilon or
-        fabs(ev[i].b - av[i].b) > epsilon) {
-      std::cerr << std::endl
-                << i << " (" << i / ew << ", " << i % ew
-                << "): " << fabs(ev[i].r - av[i].r) << " "
-                << fabs(ev[i].g - av[i].g) << " " << fabs(ev[i].b - av[i].b)
-                << " with epsilon = " << epsilon;
-      // return i + 1;
+static size_t check(const std::string &outFile, const std::string &checkFile)
+{
+  size_t mismatch = 0;
+  if (not checkFile.empty()) {
+    std::ifstream imgActual(outFile);
+    std::ifstream imgExpected(checkFile);
+    while (not imgActual.eof() and not imgExpected.eof()) {
+      char actual, expected;
+      imgActual.get(actual);
+      imgExpected.get(expected);
+      if (actual != expected) {
+        mismatch = imgExpected.tellg();
+        break;
+      }
     }
   }
-  std::cerr << "\n";
-
-  free(ev);
-  free(av);
-  fclose(fe);
-  fclose(fa);
-
-  return 0;
+  return mismatch;
 }
+
+// // If there is a mismatch in the output, return the pixel at which the output
+// // did not match. If the size of the image does not match, return -1. If the
+// // output matches, return 0.
+// static size_t check(const std::string &outFile, const std::string &checkFile) {
+//   const float epsilon = 1e-2;
+
+//   FILE *fa = fopen(outFile.c_str(), "rb");
+//   FILE *fe = fopen(checkFile.c_str(), "rb");
+
+//   unsigned ew, aw;
+//   unsigned eh, ah;
+//   fread(&ew, sizeof(unsigned), 1, fe);
+//   fread(&eh, sizeof(unsigned), 1, fe);
+//   fread(&aw, sizeof(unsigned), 1, fa);
+//   fread(&ah, sizeof(unsigned), 1, fa);
+//   if (ew != aw or eh != ah)
+//     return -1;
+
+//   FPPixel *ev = (FPPixel *)malloc(sizeof(FPPixel) * ew * eh);
+//   FPPixel *av = (FPPixel *)malloc(sizeof(FPPixel) * aw * ah);
+
+//   size_t re = fread(ev, sizeof(FPPixel), ew * eh, fe);
+//   size_t ra = fread(av, sizeof(FPPixel), aw * ah, fa);
+//   if (re != ra)
+//     return -2;
+
+//   for (unsigned i = 0; i < ew * eh; ++i) {
+//     const FPPixel *ep = &ev[i];
+//     const FPPixel *ap = &av[i];
+
+//     if (fabs(ev[i].r - av[i].r) > epsilon or
+//         fabs(ev[i].g - av[i].g) > epsilon or
+//         fabs(ev[i].b - av[i].b) > epsilon) {
+//       // std::cerr << std::endl
+//       //           << i << " (" << i / ew << ", " << i % ew
+//       //           << "): " << fabs(ev[i].r - av[i].r) << " "
+//       //           << fabs(ev[i].g - av[i].g) << " " << fabs(ev[i].b - av[i].b)
+//       //           << " with epsilon = " << epsilon;
+//       return i + 1;
+//     }
+//   }
+
+//   free(ev);
+//   free(av);
+//   fclose(fe);
+//   fclose(fa);
+
+//   return 0;
+// }
 
 inline __attribute__((always_inline)) static float randomVal(unsigned int &x) {
   x = (214013 * x + 2531011);
@@ -336,11 +335,11 @@ int main(int argc, char **argv) {
   FILE *fp = fopen(outFile.c_str(), "wb");
   fwrite(&imageWidth, sizeof(unsigned), 1, fp);
   fwrite(&imageHeight, sizeof(unsigned), 1, fp);
-  fwrite(fpimg.get(), sizeof(FPPixel), totalPixels, fp);
+  fwrite((void*)fpimg.get(), sizeof(FPPixel), totalPixels, fp);
   fclose(fp);
 
   std::cout << "\n  Checking final result..." << std::flush;
-  size_t mismatch = check(outFile, checkFile);
+  size_t mismatch = check(outImg, checkFile);
   if (mismatch == -2)
     std::cout << "  FAIL! (File size mismatch)\n\n";
   else if (mismatch == -1)

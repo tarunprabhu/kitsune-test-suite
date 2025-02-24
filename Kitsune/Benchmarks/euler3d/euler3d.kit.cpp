@@ -34,140 +34,10 @@ struct Float3 {
 #define VAR_DENSITY_ENERGY (VAR_MOMENTUM + NDIM)
 #define NVAR (VAR_DENSITY_ENERGY + 1)
 
-#ifdef restrict
-#define __restrict restrict
-#else
-#define __restrict
-#endif
-
 namespace fs = std::filesystem;
 using namespace kitsune;
 
-static bool check(const std::string &out_file, const std::string &check_file) {
-  float epsilon = 1e-5;
-  char ec, ac;
-
-  FILE *fa = fopen(out_file.c_str(), "rb");
-  FILE *fe = fopen(check_file.c_str(), "rb");
-
-  int enel, anel;
-  int enelr, anelr;
-  fread(&enel, sizeof(int), 1, fe);
-  fread(&enelr, sizeof(int), 1, fe);
-  fread(&anel, sizeof(int), 1, fa);
-  fread(&anelr, sizeof(int), 1, fa);
-  if (anel != enel or anelr != enelr)
-    return false;
-
-  float *ev = (float *)malloc(sizeof(float) * enel);
-  float *av = (float *)malloc(sizeof(float) * anel);
-
-  // Density
-  fread(&ec, sizeof(char), 1, fe);
-  fread(&ac, sizeof(char), 1, fa);
-  if (ac != ec)
-    return false;
-
-  fread(ev, sizeof(float), enel, fe);
-  fread(av, sizeof(float), anel, fa);
-  for (int i = 0; i < enel; ++i)
-    if (fabs(ev[i] - av[i]) >= epsilon)
-      return false;
-
-  // Momentum
-  fread(&ec, sizeof(char), 1, fe);
-  fread(&ac, sizeof(char), 1, fa);
-  if (ac != ec)
-    return false;
-
-  for (int j = 0; j < NDIM; ++j) {
-    fread(ev, sizeof(float), enel, fe);
-    fread(av, sizeof(float), anel, fa);
-    for (int i = 0; i < enel; ++i)
-      if (fabs(ev[i] - av[i]) >= epsilon)
-        return false;
-  }
-
-  // Density_energy
-  fread(&ec, sizeof(char), 1, fe);
-  fread(&ac, sizeof(char), 1, fa);
-  if (ac != ec)
-    return false;
-
-  fread(ev, sizeof(float), enel, fe);
-  fread(av, sizeof(float), anel, fa);
-  for (int i = 0; i < enel; ++i)
-    if (fabs(ev[i] - av[i]) >= epsilon)
-      return false;
-
-  if (fgetc(fe) != EOF or fgetc(fa) != EOF)
-    return false;
-
-  free(ev);
-  free(av);
-  fclose(fe);
-  fclose(fa);
-
-  return true;
-}
-
-static void dump(const std::string &out_file, mobile_ptr<float> variables,
-                 int nel, int nelr) {
-  FILE *fp = fopen(out_file.c_str(), "wb");
-  char type;
-
-  fwrite(&nel, sizeof(int), 1, fp);
-  fwrite(&nelr, sizeof(int), 1, fp);
-
-  type = 'D';
-  fwrite(&type, sizeof(char), 1, fp);
-  fwrite(&variables[VAR_DENSITY * nelr], sizeof(float), nel, fp);
-
-  type = 'M';
-  fwrite(&type, sizeof(char), 1, fp);
-  for (int j = 0; j < NDIM; j++)
-    fwrite(&variables[(VAR_MOMENTUM + j) * nelr], sizeof(float), nel, fp);
-
-  type = 'E';
-  fwrite(&type, sizeof(char), 1, fp);
-  fwrite(&variables[VAR_DENSITY_ENERGY * nelr], sizeof(float), nel, fp);
-
-  fclose(fp);
-}
-
-static void dumpText(const std::string& out_file, mobile_ptr<float> variables,
-                     int nel, int nelr) {
-  FILE* fp = fopen(out_file.c_str(), "wt");
-  char type;
-
-  fprintf(fp, "%d %d\n", nelr, nelr);
-
-  fprintf(fp, "%c\n", 'D');
-  for (int i = 0; i < nel; ++i) {
-    if (i)
-      fprintf(fp, " ");
-    fprintf(fp, "%.6g", variables[i + VAR_DENSITY * nelr]);
-  }
-  fprintf(fp, "\n");
-
-  fprintf(fp, "%c\n", 'M');
-  for (int i = 0; i < nel; ++i) {
-    for (int j = 0; j < NDIM; ++j) {
-      if (j)
-        fprintf(fp, " ");
-      fprintf(fp, "%.6g", variables[i + (VAR_MOMENTUM + j) * nelr]);
-    }
-    fprintf(fp, "\n");
-  }
-
-  fprintf(fp, "%c\n", 'E');
-  for (int i = 0; i < nel; ++i) {
-    if (i)
-      fprintf(fp, " ");
-    fprintf(fp, "%.6g", variables[i + VAR_DENSITY_ENERGY * nelr]);
-  }
-  fprintf(fp, "\n");
-}
+#include "euler3d.inc"
 
 inline __attribute__((always_inline)) static void
 cpy(mobile_ptr<float> dst, const mobile_ptr<float> src, int N) {
@@ -481,138 +351,50 @@ static void time_step(int j, int nelr, mobile_ptr<float> old_variables,
   }
 }
 
-/*
- * Main function
- */
-int main(int argc, char **argv) {
-  if (argc != 4) {
-    std::cerr << "USAGE: euler3d <iterations> <infile> <check-file>"
-              << std::endl;
-    return 1;
-  }
-
-  int iterations = std::stoi(argv[1]);
-  std::string in_file = argv[2];
-  std::string check_file = argv[3];
-  std::string out_file = fs::path(argv[0]).filename().string() + ".dat";
-
-  Timer main("main");
-  Timer init("init");
-  Timer iters("iters");
-  Timer copy("copy");
-  Timer sf("step_factor");
-  Timer rk("rk");
-
-  std::cout << "\n";
-  std::cout << "---- euler3d benchmark (forall) ----\n\n"
-            << "  Input file : " << in_file << "\n"
-            << "  Iterations : " << iterations << ".\n\n";
-
-  std::cout
-      << "  Reading input data, allocating arrays, initializing data, etc..."
-      << std::flush;
-
-  main.start();
-
-  // these need to be computed the first time in order to compute time step
-  mobile_ptr<float> ff_variable(NVAR);
-  Float3 ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y,
-      ff_flux_contribution_momentum_z;
-  Float3 ff_flux_contribution_density_energy;
-
-  // set far field conditions
-  const float angle_of_attack =
-      float(3.1415926535897931 / 180.0f) * float(deg_angle_of_attack);
-
-  ff_variable[VAR_DENSITY] = float(1.4);
-
-  float ff_pressure = float(1.0f);
-  float ff_speed_of_sound =
-      sqrtf(GAMMA * ff_pressure / ff_variable[VAR_DENSITY]);
-  float ff_speed = float(ff_mach) * ff_speed_of_sound;
-
-  Float3 ff_velocity;
-  ff_velocity.x = ff_speed * float(cos((float)angle_of_attack));
-  ff_velocity.y = ff_speed * float(sin((float)angle_of_attack));
-  ff_velocity.z = 0.0f;
-
-  ff_variable[VAR_MOMENTUM + 0] = ff_variable[VAR_DENSITY] * ff_velocity.x;
-  ff_variable[VAR_MOMENTUM + 1] = ff_variable[VAR_DENSITY] * ff_velocity.y;
-  ff_variable[VAR_MOMENTUM + 2] = ff_variable[VAR_DENSITY] * ff_velocity.z;
-
-  ff_variable[VAR_DENSITY_ENERGY] =
-      ff_variable[VAR_DENSITY] * (float(0.5f) * (ff_speed * ff_speed)) +
-      (ff_pressure / float(GAMMA - 1.0f));
-
-  Float3 ff_momentum;
-  ff_momentum.x = ff_variable[VAR_MOMENTUM + 0];
-  ff_momentum.y = ff_variable[VAR_MOMENTUM + 1];
-  ff_momentum.z = ff_variable[VAR_MOMENTUM + 2];
-  compute_flux_contribution(
-      ff_variable[VAR_DENSITY], ff_momentum, ff_variable[VAR_DENSITY_ENERGY],
-      ff_pressure, ff_velocity, ff_flux_contribution_momentum_x,
-      ff_flux_contribution_momentum_y, ff_flux_contribution_momentum_z,
-      ff_flux_contribution_density_energy);
-
-  int nel;
-  int nelr;
-
-  // read in domain geometry
+int main(int argc, char *argv[]) {
+  mobile_ptr<float> ff_variable;
   mobile_ptr<float> areas;
   mobile_ptr<int> elements_surrounding_elements;
   mobile_ptr<float> normals;
+  mobile_ptr<float> variables;
+  mobile_ptr<float> old_variables;
+  mobile_ptr<float> fluxes;
+  mobile_ptr<float> step_factors;
+  int iterations;
+  int nel, nelr;
+  std::string domainFile;
+  std::string cpuRefFile, gpuRefFile;
+  std::string outFile;
+  Float3 ff_flux_contribution_momentum_x;
+  Float3 ff_flux_contribution_momentum_y;
+  Float3 ff_flux_contribution_momentum_z;
+  Float3 ff_flux_contribution_density_energy;
 
-  std::ifstream file(in_file);
-  file >> nel;
-  nelr =
-      block_length * ((nel / block_length) + std::min(1, nel % block_length));
+  TimerGroup tg("euler3d");
+  Timer &main = tg.add("main");
+  Timer &init = tg.add("init");
+  Timer &iters = tg.add("iters");
+  Timer &copy = tg.add("copy");
+  Timer &sf = tg.add("step_factor");
+  Timer &rk = tg.add("rk");
 
-  areas.alloc(nelr);
-  elements_surrounding_elements.alloc(nelr * NNB);
-  normals.alloc(NDIM * NNB * nelr);
+  parseCommandLineInto(argc, argv, domainFile, iterations, cpuRefFile,
+                       gpuRefFile);
+  outFile = fs::path(argv[0]).filename().string() + ".dat";
 
-  // read in data
-  for (int i = 0; i < nel; i++) {
-    file >> areas[i];
-    for (int j = 0; j < NNB; j++) {
-      file >> elements_surrounding_elements[i + j * nelr];
-      if (elements_surrounding_elements[i + j * nelr] < 0)
-        elements_surrounding_elements[i + j * nelr] = -1;
-      // it's coming in with Fortran numbering
-      elements_surrounding_elements[i + j * nelr]--;
+  header("forall", domainFile, iterations);
 
-      for (int k = 0; k < NDIM; k++) {
-        file >> normals[i + (j + k * NNB) * nelr];
-        normals[i + (j + k * NNB) * nelr] = -normals[i + (j + k * NNB) * nelr];
-      }
-    }
-  }
-
-  // fill in remaining data
-  int last = nel - 1;
-  for (int i = nel; i < nelr; i++) {
-    areas[i] = areas[last];
-    for (int j = 0; j < NNB; j++) {
-      // duplicate the last element
-      elements_surrounding_elements[i + j * nelr] =
-          elements_surrounding_elements[last + j * nelr];
-      for (int k = 0; k < NDIM; k++)
-        normals[i + (j + k * NNB) * nelr] =
-            normals[last + (j + k * NNB) * nelr];
-    }
-  }
+  // read in domain geometry
+  main.start();
+  read_domain(ff_variable, areas, elements_surrounding_elements, normals,
+              variables, old_variables, fluxes, step_factors,
+              ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y,
+              ff_flux_contribution_momentum_z,
+              ff_flux_contribution_density_energy, nel, nelr, domainFile);
 
   // Create arrays and set initial conditions
-  mobile_ptr<float> variables(nelr * NVAR);
-  std::cout << "  done.\n\n";
-
-  std::cout << "  Starting benchmark...\n" << std::flush;
-
   init.start();
   initialize_variables(nelr, variables, ff_variable);
-  mobile_ptr<float> old_variables(nelr * NVAR);
-  mobile_ptr<float> fluxes(nelr * NVAR);
-  mobile_ptr<float> step_factors(nelr);
   init.stop();
 
   // Begin iterations
@@ -641,34 +423,19 @@ int main(int argc, char **argv) {
   iters.stop();
   main.stop();
 
-  dump(out_file, variables, nel, nelr);
-
   std::cout << "\n"
-            << "      Total time : " << main.total() << " us\n"
-            << "       Init time : " << init.total() << " us\n"
-            << "    Compute time : " << iters.total() << " us\n"
-            << "            copy : " << copy.total() << " us\n"
-            << "              sf : " << sf.total() << " us\n"
-            << "              rk : " << rk.total() << " us\n"
+            << "      Total time : " << Timer::secs(main.total()) << "\n"
+            << "       Init time : " << Timer::secs(init.total()) << "\n"
+            << "    Compute time : " << Timer::secs(iters.total()) << "\n"
+            << "            copy : " << Timer::secs(copy.total()) << "\n"
+            << "              sf : " << Timer::secs(sf.total()) << "\n"
+            << "              rk : " << Timer::secs(rk.total()) << "\n"
             << "----\n\n";
 
-  bool errors = not check(out_file, check_file);
-  std::cout << "\n  Checking final result..." << std::flush;
-  if (errors)
-    std::cout << "  FAIL! Output mismatch\n\n";
-  else
-    std::cout << "  pass\n\n";
-
-  json(std::cout, {main, init, iters, copy, sf, rk});
-
-  ff_variable.free();
-  areas.free();
-  elements_surrounding_elements.free();
-  normals.free();
-  variables.free();
-  old_variables.free();
-  fluxes.free();
-  step_factors.free();
-
-  return errors;
+  // ok will be true (non-zero) on success. But the OS needs 0 to indicate
+  // success.
+  bool ok = footer(tg, ff_variable, areas, elements_surrounding_elements,
+                   normals, variables, old_variables, fluxes, step_factors, nel,
+                   nelr, outFile, cpuRefFile, gpuRefFile);
+  return !ok;
 }

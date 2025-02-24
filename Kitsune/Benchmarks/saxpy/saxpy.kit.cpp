@@ -1,53 +1,36 @@
-// saxpy
+// Simple saxpy benchmark
 
 #include <cmath>
 #include <iostream>
 #include <kitsune.h>
 #include <timing.h>
 
+using ElementType = float;
 using namespace kitsune;
 
-const float DEFAULT_X_VALUE = rand() % 1000000;
-const float DEFAULT_Y_VALUE = rand() % 1000000;
-const float DEFAULT_A_VALUE = rand() % 1000000;
+#include "saxpy.inc"
 
-static bool check(const mobile_ptr<float> v, size_t n) {
-  float err = 0.0f;
-  for (size_t i = 0; i < n; i++) {
-    err = err +
-          fabs(v[i] - (DEFAULT_A_VALUE * DEFAULT_X_VALUE + DEFAULT_Y_VALUE));
-  }
-  return err != 0.0f;
-}
+const ElementType DEFAULT_X_VALUE = rand() % 1000000;
+const ElementType DEFAULT_Y_VALUE = rand() % 1000000;
+const ElementType DEFAULT_A_VALUE = rand() % 1000000;
 
 int main(int argc, char *argv[]) {
-  size_t size = 1 << 28;
-  unsigned int iterations = 10;
-  if (argc > 3) {
-    std::cout << "usage: saxpy [size] [iterations]\n";
-    return 1;
-  }
-  if (argc > 1)
-    size = atol(argv[1]);
-  if (argc > 2)
-    iterations = atoi(argv[2]);
-  Timer init("init");
-  Timer saxpy("saxpy");
+  size_t n;
+  unsigned iterations;
+  mobile_ptr<ElementType> x;
+  mobile_ptr<ElementType> y;
+  mobile_ptr<ElementType> r;
+  TimerGroup tg("saxpy");
+  Timer &init = tg.add("init");
+  Timer &saxpy = tg.add("saxpy");
 
-  std::cout << "\n";
-  std::cout << "---- saxpy benchmark (forall) ----\n"
-            << "  Problem size: " << size << " elements.\n\n";
-  std::cout << "  Allocating arrays..." << std::flush;
-  mobile_ptr<float> x(size);
-  mobile_ptr<float> y(size);
-  std::cout << "  done.\n\n";
+  parseCommandLineInto(argc, argv, n, iterations);
+  header("forall", DEFAULT_A_VALUE, x, y, r, n);
 
-  std::cout << "  Starting benchmark...\n" << std::flush;
-
-  for (unsigned int t = 0; t < iterations; t++) {
+  for (unsigned t = 0; t < iterations; t++) {
     init.start();
     // clang-format off
-    forall(size_t i = 0; i < size; i++) {
+    forall(size_t i = 0; i < n; i++) {
       x[i] = DEFAULT_X_VALUE;
       y[i] = DEFAULT_Y_VALUE;
     }
@@ -56,27 +39,15 @@ int main(int argc, char *argv[]) {
 
     saxpy.start();
     // clang-format off
-    forall(size_t i = 0; i < size; i++) {
+    forall(size_t i = 0; i < n; i++) {
       y[i] = DEFAULT_A_VALUE * x[i] + y[i];
     }
     // clang-format on
     uint64_t usSaxpy = saxpy.stop();
-    std::cout << "\t" << t << ". iteration time: " << (usInit + usSaxpy)
-              << " us\n";
+    std::cout << "\t" << t
+              << ". iteration time: " << Timer::secs(usInit + usSaxpy) << "\n";
   }
 
-  std::cout << "\n  Checking final result..." << std::flush;
-  bool error = check(y, size);
-  if (error) {
-    std::cout << "  FAIL!\n\n";
-  } else {
-    std::cout << "  pass\n\n";
-  }
-
-  json(std::cout, {init, saxpy});
-
-  x.free();
-  y.free();
-
-  return error;
+  size_t errors = footer(tg, DEFAULT_A_VALUE, x, y, r, n);
+  return errors;
 }

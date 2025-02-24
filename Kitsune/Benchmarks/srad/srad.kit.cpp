@@ -7,65 +7,7 @@
 namespace fs = std::filesystem;
 using namespace kitsune;
 
-static size_t check(const std::string &outFile, const std::string &checkFile,
-                    int n) {
-  float epsilon = 1e-4;
-  FILE *fa = fopen(outFile.c_str(), "rb");
-  FILE *fe = fopen(checkFile.c_str(), "rb");
-  float *ev = (float *)malloc(n * sizeof(float));
-  float *av = (float *)malloc(n * sizeof(float));
-
-  fread(ev, sizeof(float), n, fe);
-  fread(av, sizeof(float), n, fa);
-  for (int i = 0; i < n; ++i)
-    if (fabs(ev[i] - av[i]) > epsilon)
-      return i + 1;
-
-  if (fgetc(fe) != EOF or fgetc(fa) != EOF)
-    return n + 1;
-
-  free(ev);
-  free(av);
-  fclose(fe);
-  fclose(fa);
-
-  return 0;
-}
-
-static void random_matrix(mobile_ptr<float> I, unsigned int rows,
-                          unsigned int cols) {
-  srand(7);
-  for (unsigned int i = 0; i < rows; i++) {
-    for (unsigned int j = 0; j < cols; j++) {
-      I[i * cols + j] = rand() / (float)RAND_MAX;
-    }
-  }
-
-  std::cout << "  initial input data:\n";
-  for (unsigned int i = 0; i < 10; i++) {
-    std::cout << "   ";
-    for (unsigned int j = 0; j < 10; j++)
-      std::cout << I[i * cols + j] << " ";
-    std::cout << "...\n";
-  }
-  std::cout << "   ...\n";
-}
-
-[[noreturn]]
-static void usage(int argc, char **argv) {
-  std::cerr << "USAGE: srad <check-file> <rows> <cols> <y1> <y2> <x1> <x2> "
-               "<lambda> <iterations>\n";
-  std::cerr << "\t<check-file>  - File with the expected output\n";
-  std::cerr << "\t<rows>        - number of rows\n";
-  std::cerr << "\t<cols>        - number of cols\n";
-  std::cerr << "\t<y1>          - y1 value of the speckle\n";
-  std::cerr << "\t<y2>          - y2 value of the speckle\n";
-  std::cerr << "\t<x1>          - x1 value of the speckle\n";
-  std::cerr << "\t<x2>          - x2 value of the speckle\n";
-  std::cerr << "\t<lambda>      - lambda (0,1\n";
-  std::cerr << "\t<no. of iter> - number of iterations\n";
-  exit(1);
-}
+#include "srad.inc"
 
 int main(int argc, char *argv[]) {
   int rows, cols, size_I, size_R, niter;
@@ -79,73 +21,23 @@ int main(int argc, char *argv[]) {
   float D;
   mobile_ptr<float> c;
   float lambda;
-  std::string checkFile;
+  std::string cpuRefFile, gpuRefFile;
   std::string outFile;
 
-  Timer main("main");
-  Timer init("init");
-  Timer iters("iters");
-  Timer loop1("loop1");
-  Timer loop2("loop2");
+  TimerGroup tg("srad");
+  Timer &main = tg.add("main");
+  Timer &init = tg.add("init");
+  Timer &iters = tg.add("iters");
+  Timer &loop1 = tg.add("loop1");
+  Timer &loop2 = tg.add("loop2");
+
+  parseCommandLineInto(argc, argv, niter, rows, cols, r1, r2, c1, c2, lambda,
+                       cpuRefFile, gpuRefFile);
+  header("forall", I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows, cols, niter);
 
   outFile = fs::path(argv[0]).filename().string() + ".dat";
-  if (argc == 10) {
-    checkFile = argv[1];         // File containing the expected result
-    rows = std::stoi(argv[2]);   // number of rows in the domain
-    cols = std::stoi(argv[3]);   // number of cols in the domain
-    r1 = std::stoi(argv[4]);     // y1 position of the speckle
-    r2 = std::stoi(argv[5]);     // y2 position of the speckle
-    c1 = std::stoi(argv[6]);     // x1 position of the speckle
-    c2 = std::stoi(argv[7]);     // x2 position of the speckle
-    lambda = std::stof(argv[8]); // Lambda value
-    niter = std::stoi(argv[9]);  // number of iterations
-  } else if (argc == 2) {
-    // run with a default configuration.
-    checkFile = argv[1];
-    rows = 6400;
-    cols = 6400;
-    r1 = 0;
-    r2 = 127;
-    c1 = 0;
-    c2 = 127;
-    lambda = 0.5;
-    niter = 2000;
-  } else {
-    usage(argc, argv);
-  }
-
-  if ((rows % 16 != 0) || (cols % 16 != 0)) {
-    fprintf(stderr, "rows and cols must be multiples of 16\n");
-    exit(1);
-  }
-
-  std::cout << "\n";
-  std::cout << "---- srad benchmark (forall) ----\n"
-            << "  Row size    : " << rows << ".\n"
-            << "  Column size : " << cols << ".\n"
-            << "  Iterations  : " << niter << ".\n\n";
-
-  std::cout << "  Allocating arrays and building random matrix..."
-            << std::flush;
-
   size_I = cols * rows;
   size_R = (r2 - r1 + 1) * (c2 - c1 + 1);
-
-  I.alloc(size_I);
-  J.alloc(size_I);
-  c.alloc(size_I);
-  iN.alloc(rows);
-  iS.alloc(rows);
-  jW.alloc(cols);
-  jE.alloc(cols);
-  dN.alloc(size_I);
-  dS.alloc(size_I);
-  dW.alloc(size_I);
-  dE.alloc(size_I);
-
-  random_matrix(I, rows, cols);
-
-  std::cout << "  Running benchmark...\n" << std::flush;
 
   main.start();
   init.start();
@@ -245,26 +137,14 @@ int main(int argc, char *argv[]) {
   main.stop();
 
   std::cout << "\n"
-            << "      Total time : " << main.total() << " us\n"
-            << "       Init time : " << init.total() << " us\n"
-            << "    Compute time : " << iters.total() << " us\n"
-            << "           Loop1 : " << loop1.total() << " us\n"
-            << "           Loop2 : " << loop2.total() << " us\n"
+            << "      Total time : " << Timer::secs(main.total()) << "\n"
+            << "       Init time : " << Timer::secs(init.total()) << "\n"
+            << "    Compute time : " << Timer::secs(iters.total()) << "\n"
+            << "           Loop1 : " << Timer::secs(loop1.total()) << "\n"
+            << "           Loop2 : " << Timer::secs(loop2.total()) << "\n"
             << "----\n\n";
 
-  if (FILE *fp = fopen(outFile.c_str(), "wb")) {
-    fwrite((void *)J.get(), sizeof(float), size_I, fp);
-    fclose(fp);
-  }
-
-  size_t mismatch = check(outFile, checkFile, size_I);
-  std::cout << "\n  Checking final result..." << std::flush;
-  if (mismatch)
-    std::cout << "  FAIL! Output mismatch at byte " << mismatch << "\n\n";
-  else
-    std::cout << "  pass\n\n";
-
-  json(std::cout, {main, init, iters, loop1, loop2});
-
+  size_t mismatch = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows,
+                           cols, outFile, cpuRefFile, gpuRefFile);
   return mismatch;
 }

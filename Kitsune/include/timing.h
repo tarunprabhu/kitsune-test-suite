@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -22,10 +23,10 @@
 /// Execution time statistics for some region of code.
 typedef struct Stats {
   /// The number of times the region of code was entered.
-  uint64_t entries;
+  uint64_t count;
 
   /// The total execution time, in seconds, of the region. The mean execution
-  /// time will simply be this divided by @ref entries.
+  /// time will simply be this divided by @ref count.
   uint64_t total;
 
   /// The minimum execution time, in microseconds, of any one invocation.
@@ -64,7 +65,7 @@ private:
 
 public:
   Timer(const std::string &name) : name(name) {
-    stats.entries = 0;
+    stats.count = 0;
     stats.total = 0;
     stats.min = std::numeric_limits<decltype(stats.min)>::max();
     stats.max = 0;
@@ -93,7 +94,7 @@ public:
     uint64_t us =
         std::chrono::duration_cast<Microseconds>(tock - *tick).count();
 
-    stats.entries += 1;
+    stats.count += 1;
     stats.total += us;
     if (us < stats.min)
       stats.min = us;
@@ -108,7 +109,7 @@ public:
   uint64_t total() const { return stats.total; }
 
   /// Get the total number of entries recorded by this timer.
-  uint64_t entries() const { return stats.entries; }
+  uint64_t count() const { return stats.count; }
 
   /// Get the minimum time, in microseconds, recorded by this timer.
   uint64_t min() const { return stats.min; }
@@ -118,27 +119,76 @@ public:
 
   /// Get the mean time, in microseconds (rounded down to the nearest
   /// microsecond), recorded by this timer
-  uint64_t mean() const { return stats.total / stats.entries; }
+  uint64_t mean() const { return stats.total / stats.count; }
 
   /// Print the statistics for this region in JSON format to the given output
   /// stream.
   std::ostream &json(std::ostream &os) const {
     os << "  \"" << name << "\": {" << std::endl;
-    os << "    \"entries\": " << stats.entries << "," << std::endl;
+    os << "    \"count\": " << stats.count << "," << std::endl;
     os << "    \"min\": " << stats.min << "," << std::endl;
     os << "    \"max\": " << stats.max << "," << std::endl;
-    os << "    \"mean\": " << (stats.total / stats.entries) << "," << std::endl;
+    os << "    \"mean\": " << (stats.total / stats.count) << "," << std::endl;
     os << "    \"total\": " << stats.total << std::endl;
     os << "  }";
     return os;
   }
+
+  // Convert the given value in microseconds to seconds.
+  static std::string secs(uint64_t us) {
+    // Ideally, we should use a stringstream here, but the kitsune.h header
+    // redefines sync which causes a conflict with streambuf in GCC. If the
+    // issue in kitsune.h is fixed, should be able to switch to doing this in
+    // the C++ way.
+    char buf[16];
+    snprintf(buf, 16, "%.4f secs", float(us) / 1000000.0);
+    return buf;
+  }
 };
 
-/// Print statistics for a number of timers to the given output stream. This
-/// will print the statistics in JSON format with some sentinels on either
-/// side. A post-processing script can scrape the results by looking for the
-/// sentinels. The name is usually the name of the benchmark.
-static std::ostream &json(std::ostream &os, const std::vector<Timer> &timers) {
+/// A timer group that manages an ordered set of timers.
+class TimerGroup {
+private:
+  /// The name of the timer group.
+  std::string name;
+
+  /// The timers in the group.
+  std::vector<std::unique_ptr<Timer>> timers;
+
+public:
+  TimerGroup(const std::string &name) : name(name) {}
+  TimerGroup(const TimerGroup &) = delete;
+  TimerGroup(TimerGroup &&) = delete;
+  TimerGroup &operator=(const TimerGroup &) = delete;
+  TimerGroup &operator=(TimerGroup &&) = delete;
+
+  /// Create a new timer with the given name.
+  Timer &add(const std::string &name) {
+    timers.emplace_back(new Timer(name));
+    return *timers.back();
+  }
+
+  /// Print statistics for the timers in the group to the given output stream.
+  /// This will print the statistics in JSON format with some sentinels on
+  /// either side. A post-processing script can scrape the results by looking
+  /// for the sentinels. The name is usually the name of the benchmark.
+  std::ostream &json(std::ostream &os) const {
+    os << "<json>" << std::endl;
+    os << "{" << std::endl;
+    if (timers.size()) {
+      timers.front()->json(os);
+      for (size_t i = 1; i < timers.size(); ++i) {
+        os << "," << std::endl;
+        timers.at(i)->json(os);
+      }
+    }
+    os << std::endl << "}" << std::endl;
+    os << "</json>" << std::endl;
+    return os;
+  }
+};
+
+static std::ostream &json(std::ostream &os, std::vector<Timer> timers) {
   os << "<json>" << std::endl;
   os << "{" << std::endl;
   if (timers.size()) {
@@ -155,25 +205,25 @@ static std::ostream &json(std::ostream &os, const std::vector<Timer> &timers) {
 
 #else // !__cplusplus
 
-/// A simple timer class that is intended for timing and to keep track of
-/// statistics. Each instance of this class is intended to record the execution
-/// time of some  named region. The start() method should be called just before
-/// the region of interest in the code is entered (which, in the case of the
-/// benchmarks in the kitsune test suite is typically a forall loop). The stop()
-/// method should be called at the end of the region, typically immediately
-/// after a forall loop. Nested invocations are not allowed i.e. If start() is
-/// called after another call to start() but before any call to stop(), it will
-/// be ignored.
-typedef struct Timer {
-  /// The name of the region with which this timer is associated (typically the
-  /// name of a kernel).
-  const char *name;
+    /// A simple timer class that is intended for timing and to keep track of
+    /// statistics. Each instance of this class is intended to record the
+    /// execution time of some  named region. The start() method should be
+    /// called just before the region of interest in the code is entered (which,
+    /// in the case of the benchmarks in the kitsune test suite is typically a
+    /// forall loop). The stop() method should be called at the end of the
+    /// region, typically immediately after a forall loop. Nested invocations
+    /// are not allowed i.e. If start() is called after another call to start()
+    /// but before any call to stop(), it will be ignored.
+    typedef struct Timer {
+      /// The name of the region with which this timer is associated (typically
+      /// the name of a kernel).
+      const char *name;
 
-  /// Execution time statistics
-  Stats stats;
-} Timer;
+      /// Execution time statistics
+      Stats stats;
+    } Timer;
 
-// TODO: Implement timing for C
+    // TODO: Implement timing for C
 
 #endif // __cplusplus
 
