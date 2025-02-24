@@ -4,16 +4,23 @@ file(COPY lit.local.cfg DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 set(input fvcorr.domn.193K)
 if (KITSUNE_TEST_INPUT_SIZE STREQUAL "small")
+  # domain      fvcorr.domn.193k
   # iterations  100
-  # in-file     fvcorr.domn.193k
-  # check-file  euler3d.small.dat
-  set(check euler3d.small.dat)
-  kitsune_singlesource(CMDARGS 100 ${input} ${check} DATA ${input} ${check})
+  set(base euler3d.small)
+  set(refc "${base}.cpu.dat")
+  set(refg "${base}.gpu.dat")
+  kitsune_singlesource(
+    CMDARGS -j -c ${refc} -g ${refg} ${input} 100
+    DATA ${input} ${refc} ${refg})
 elseif (KITSUNE_TEST_INPUT_SIZE STREQUAL "medium")
+  # domain      fvcorr.domn.193k
   # iterations  4000
-  # in-file     fvcorr.domn.193k
-  # check-file  euler3d.medium.dat
-  kitsune_singlesource(CMDARGS 4000 ${input} ${check} DATA ${input} ${check})
+  set(base euler3d.medium)
+  set(refc "${base}.cpu.dat")
+  set(refg "${base}.gpu.dat")
+  kitsune_singlesource(
+    CMDARGS -j -c ${refc} -g ${refg} ${input} 4000
+    DATA ${input} ${refc} ${refg})
 else()
   kitsune_singlesource()
 endif()
