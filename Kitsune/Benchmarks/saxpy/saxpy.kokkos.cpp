@@ -40,10 +40,20 @@ int main(int argc, char *argv[]) {
 
     init.start();
     // clang-format off
-    Kokkos::parallel_for(n, KOKKOS_LAMBDA(const int i) {
-       bufx[i] = DEFAULT_X_VALUE;
-       bufy[i] = DEFAULT_Y_VALUE;
-    });
+    // This has been disabled because there is a bug in Kitsune that triggers an
+    // ICE (Internal Compiler Error) if there are two Kokkos::parallel_for's in
+    // the same function. When that is fixed, this can be re-enabled - although
+    // it is probably best to just leave this as a for loop and make the same
+    // change in the other implementations. The more interesting timing here
+    // is that of the actual saxpy loop.
+    for (size_t i = 0; i < n; ++i) {
+      bufx[i] = DEFAULT_X_VALUE;
+      bufy[i] = DEFAULT_Y_VALUE;
+    }
+    // Kokkos::parallel_for(n, KOKKOS_LAMBDA(const int i) {
+    //    bufx[i] = DEFAULT_X_VALUE;
+    //    bufy[i] = DEFAULT_Y_VALUE;
+    // });
     // clang-format on
     uint64_t usInit = init.stop();
 

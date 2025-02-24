@@ -117,11 +117,11 @@ static size_t check(ElementType a, const Arr &x, const Arr &y, const Arr &r,
 }
 
 template <typename Arr> static void alloc(Arr &x, Arr &y, Arr &r, size_t n) {
-#ifdef IS_CUDA
+#if defined(IS_CUDA)
   cudaMallocManaged(&x, n * sizeof(ElementType));
   cudaMallocManaged(&y, n * sizeof(ElementType));
   cudaMallocManaged(&r, n * sizeof(ElementType));
-#elifdef IS_HIP
+#elif defined(IS_HIP)
   HIPCHECK(hipMallocManaged(&x, n * sizeof(ElementType)));
   HIPCHECK(hipMallocManaged(&y, n * sizeof(ElementType)));
   HIPCHECK(hipMallocManaged(&r, n * sizeof(ElementType)));
@@ -151,11 +151,11 @@ static void header(const std::string &label, ElementType a, Arr &x, Arr &y,
 }
 
 template <typename Arr> static void dealloc(Arr &x, Arr &y, Arr &r) {
-#ifdef IS_CUDA
+#if defined(IS_CUDA)
   cudaFree(x);
   cudaFree(y);
   cudaFree(r);
-#elifdef IS_HIP
+#elif defined(IS_HIP)
   hipFree(x);
   hipFree(y);
   hipFree(r);

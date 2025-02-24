@@ -28,14 +28,20 @@ int main(int argc, char *argv[]) {
   header("forall", DEFAULT_A_VALUE, x, y, r, n);
 
   for (unsigned t = 0; t < iterations; t++) {
+    std::cerr << "t = " << t << "\n";
     init.start();
+    std::cerr << "Before init\n";
     // clang-format off
     forall(size_t i = 0; i < n; i++) {
-      x[i] = DEFAULT_X_VALUE;
-      y[i] = DEFAULT_Y_VALUE;
+      // x[i] = DEFAULT_X_VALUE;
+      // y[i] = DEFAULT_Y_VALUE;
+      x[i] = 3;
+      y[i] = 4;
     }
     // clang-format on
     uint64_t usInit = init.stop();
+
+    std::cerr << "Init done\n";
 
     saxpy.start();
     // clang-format off

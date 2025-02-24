@@ -224,7 +224,7 @@ int main(int argc, char **argv) {
   {
     unsigned int totalPixels = imageWidth * imageHeight;
     mobile_ptr<Pixel> img(totalPixels);
-    Pixel *img_p = img.get();
+    Pixel *[[kitsune::mobile]] img_p = img.get();
     std::cout << "  done.\n\n";
 
     std::cout << "  Running benchmark ... " << std::flush;
@@ -275,7 +275,7 @@ int main(int argc, char **argv) {
     if (imgFile.is_open()) {
       imgFile << "P6 " << imageWidth << " " << imageHeight << " 255 ";
       for (int i = totalPixels - 1; i >= 0; i--)
-      imgFile << img[i].r << img[i].g << img[i].b;
+        imgFile << img[i].r << img[i].g << img[i].b;
       imgFile.close();
     }
     std::cout << "done\n\n";
