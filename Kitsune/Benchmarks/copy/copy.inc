@@ -27,6 +27,7 @@ static const char *help =
   "OPTIONS\n"
   "\n"
   "    -h       Print help and exit\n"
+  "    -j       Print the recorded times in JSON\n"
   "    -t <N>   Number of threads per block on the GPU. This is only relevant\n"
   "             for the .cu and .hip implementations of this benchmark [256]\n"
   "\n"
@@ -115,10 +116,10 @@ static size_t check(const Arr &dst, const Arr &src, size_t n) {
 }
 
 template <typename Arr> static void alloc(Arr &dst, Arr &src, size_t n) {
-#ifdef IS_CUDA
+#if defined(IS_CUDA)
   cudaMallocManaged(&dst, n * sizeof(ElementType));
   cudaMallocManaged(&src, n * sizeof(ElementType));
-#elifdef IS_HIP
+#elif defined(IS_HIP)
   hipMallocManaged(&dst, n * sizeof(ElementType));
   hipMallocManaged(&src, n * sizeof(ElementType));
 #else
@@ -144,10 +145,10 @@ static void header(const std::string &label, Arr &dst, Arr &src, size_t n) {
 }
 
 template <typename Arr> static void dealloc(Arr &dst, Arr &src) {
-#ifdef IS_CUDA
+#if defined(IS_CUDA)
   cudaFree(dst);
   cudaFree(src);
-#elifdef IS_HIP
+#elif defined(IS_HIP)
   hipFree(dst);
   hipFree(src);
 #else  // CPU

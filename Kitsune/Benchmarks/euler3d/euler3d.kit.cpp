@@ -1,4 +1,4 @@
-/// Copyright 2009, Andrew Corrigan, acorriga@gmu.edu
+// Copyright 2009, Andrew Corrigan, acorriga@gmu.edu
 // This code is from the AIAA-2009-4001 paper
 
 #include <cmath>
@@ -9,38 +9,12 @@
 #include <string>
 #include <timing.h>
 
-struct Float3 {
-  float x, y, z;
-};
-
-#define block_length 1
-
-/*
- * Options
- *
- */
-#define GAMMA 1.4
-#define NDIM 3
-#define NNB 4
-#define RK 3 // 3rd order RK
-#define ff_mach 1.2
-#define deg_angle_of_attack 0.0f
-
-/*
- * not options
- */
-#define VAR_DENSITY 0
-#define VAR_MOMENTUM 1
-#define VAR_DENSITY_ENERGY (VAR_MOMENTUM + NDIM)
-#define NVAR (VAR_DENSITY_ENERGY + 1)
-
 namespace fs = std::filesystem;
 using namespace kitsune;
 
 #include "euler3d.inc"
 
-inline __attribute__((always_inline)) static void
-cpy(mobile_ptr<float> dst, const mobile_ptr<float> src, int N) {
+static void cpy(mobile_ptr<float> dst, const mobile_ptr<float> src, int N) {
   // clang-format off
   forall(unsigned int i = 0; i < N; i++) {
     dst[i] = src[i];
@@ -48,9 +22,8 @@ cpy(mobile_ptr<float> dst, const mobile_ptr<float> src, int N) {
   // clang-format on
 }
 
-inline __attribute__((always_inline)) static void
-initialize_variables(int nelr, mobile_ptr<float> variables,
-                     mobile_ptr<float> ff_variable) {
+static void initialize_variables(int nelr, mobile_ptr<float> variables,
+                                 mobile_ptr<float> ff_variable) {
   forall(int i = 0; i < nelr; i++) {
     for (int j = 0; j < NVAR; j++)
       variables[i + j * nelr] = ff_variable[j];
@@ -135,7 +108,6 @@ static void compute_step_factor(int nelr, const mobile_ptr<float> variables,
   }
 }
 
-// inline __attribute__((always_inline))
 static void compute_flux(int nelr,
                          mobile_ptr<int> elements_surrounding_elements,
                          mobile_ptr<float> normals, mobile_ptr<float> variables,
@@ -370,22 +342,22 @@ int main(int argc, char *argv[]) {
   Float3 ff_flux_contribution_momentum_z;
   Float3 ff_flux_contribution_density_energy;
 
-  TimerGroup tg("euler3d");
-  Timer &main = tg.add("main");
-  Timer &init = tg.add("init");
-  Timer &iters = tg.add("iters");
-  Timer &copy = tg.add("copy");
-  Timer &sf = tg.add("step_factor");
-  Timer &rk = tg.add("rk");
-
   parseCommandLineInto(argc, argv, domainFile, iterations, cpuRefFile,
                        gpuRefFile);
+
+  TimerGroup tg("euler3d");
+  Timer &main = tg.add("main", "Total");
+  Timer &init = tg.add("init", "Init");
+  Timer &iters = tg.add("iters", "Compute");
+  Timer &copy = tg.add("copy", "Copy");
+  Timer &sf = tg.add("step_factor", "Step factor");
+  Timer &rk = tg.add("rk", "Runge-Kutta");
+
   outFile = fs::path(argv[0]).filename().string() + ".dat";
 
   header("forall", domainFile, iterations);
 
   // read in domain geometry
-  main.start();
   read_domain(ff_variable, areas, elements_surrounding_elements, normals,
               variables, old_variables, fluxes, step_factors,
               ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y,
@@ -393,6 +365,7 @@ int main(int argc, char *argv[]) {
               ff_flux_contribution_density_energy, nel, nelr, domainFile);
 
   // Create arrays and set initial conditions
+  main.start();
   init.start();
   initialize_variables(nelr, variables, ff_variable);
   init.stop();
@@ -422,15 +395,6 @@ int main(int argc, char *argv[]) {
   }
   iters.stop();
   main.stop();
-
-  std::cout << "\n"
-            << "      Total time : " << Timer::secs(main.total()) << "\n"
-            << "       Init time : " << Timer::secs(init.total()) << "\n"
-            << "    Compute time : " << Timer::secs(iters.total()) << "\n"
-            << "            copy : " << Timer::secs(copy.total()) << "\n"
-            << "              sf : " << Timer::secs(sf.total()) << "\n"
-            << "              rk : " << Timer::secs(rk.total()) << "\n"
-            << "----\n\n";
 
   // ok will be true (non-zero) on success. But the OS needs 0 to indicate
   // success.

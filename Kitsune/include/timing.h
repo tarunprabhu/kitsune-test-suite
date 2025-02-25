@@ -54,7 +54,11 @@ class Timer {
 private:
   /// The name of the region with which this timer is associated (typically the
   /// name of a kernel).
-  std::string name;
+  std::string mName;
+
+  /// A long name for the timer. This is used when printing the timer group in
+  /// which this timer is contained.
+  std::string mLabel;
 
   /// The time point registered when the timer was started. This will be
   /// std::nullopt if the timer has not been started.
@@ -64,7 +68,12 @@ private:
   Stats stats;
 
 public:
-  Timer(const std::string &name) : name(name) {
+  /// Create a timer with the given name and an optional label. If a label is
+  /// not provided, the label of the timer will be the same as the name.
+  Timer(const std::string &name, const std::string &label = "")
+      : mName(name), mLabel(label) {
+    if (not label.size())
+      mLabel = name;
     stats.count = 0;
     stats.total = 0;
     stats.min = std::numeric_limits<decltype(stats.min)>::max();
@@ -105,6 +114,12 @@ public:
     return us;
   }
 
+  /// Get the name of the timer.
+  const std::string &name() const { return mName; }
+
+  /// Get the timer label.
+  const std::string &label() const { return mLabel; }
+
   /// Get the total time recorded by this timer.
   uint64_t total() const { return stats.total; }
 
@@ -124,7 +139,7 @@ public:
   /// Print the statistics for this region in JSON format to the given output
   /// stream.
   std::ostream &json(std::ostream &os) const {
-    os << "  \"" << name << "\": {" << std::endl;
+    os << "  \"" << name() << "\": {" << std::endl;
     os << "    \"count\": " << stats.count << "," << std::endl;
     os << "    \"min\": " << stats.min << "," << std::endl;
     os << "    \"max\": " << stats.max << "," << std::endl;
@@ -141,7 +156,7 @@ public:
     // issue in kitsune.h is fixed, should be able to switch to doing this in
     // the C++ way.
     char buf[16];
-    snprintf(buf, 16, "%.4f secs", float(us) / 1000000.0);
+    snprintf(buf, 16, "%8.4f secs", float(us) / 1000000.0);
     return buf;
   }
 };
@@ -162,10 +177,22 @@ public:
   TimerGroup &operator=(const TimerGroup &) = delete;
   TimerGroup &operator=(TimerGroup &&) = delete;
 
-  /// Create a new timer with the given name.
-  Timer &add(const std::string &name) {
-    timers.emplace_back(new Timer(name));
+  /// Create a new timer with the given name and label. This will create a timer
+  /// with the name even if one already exists in the group.
+  Timer &add(const std::string &name, const std::string &label = "") {
+    timers.emplace_back(new Timer(name, label));
     return *timers.back();
+  }
+
+  /// Get the timer with the given name. If more than one timer with the name
+  /// was added to the group, the first timer will always be returned. It is an
+  /// error to call this function with a name that does not exist in the group.
+  Timer &get(const std::string &name) {
+    for (const std::unique_ptr<Timer> &timer : timers)
+      if (timer->name() == name)
+        return *timer;
+    std::cerr << "No such timer: '" << name << "'\n";
+    std::abort();
   }
 
   /// Print statistics for the timers in the group to the given output stream.
@@ -184,6 +211,23 @@ public:
     }
     os << std::endl << "}" << std::endl;
     os << "</json>" << std::endl;
+    return os;
+  }
+
+  /// Print the times for each timer in this region in a human-friendly format
+  /// to the given output stream.
+  std::ostream &prettyTimes(std::ostream &os, unsigned indent = 0) const {
+    unsigned width = 0;
+    for (const std::unique_ptr<Timer> &pTimer : timers)
+      if (pTimer->label().size() > width)
+        width = pTimer->label().size();
+
+    char buf[80];
+    for (const std::unique_ptr<Timer> &pTimer : timers) {
+      snprintf(buf, 80, "%*s%-*s :  %s", indent, "", width,
+               pTimer->label().c_str(), Timer::secs(pTimer->total()).c_str());
+      os << buf << "\n";
+    }
     return os;
   }
 };
@@ -205,25 +249,25 @@ static std::ostream &json(std::ostream &os, std::vector<Timer> timers) {
 
 #else // !__cplusplus
 
-    /// A simple timer class that is intended for timing and to keep track of
-    /// statistics. Each instance of this class is intended to record the
-    /// execution time of some  named region. The start() method should be
-    /// called just before the region of interest in the code is entered (which,
-    /// in the case of the benchmarks in the kitsune test suite is typically a
-    /// forall loop). The stop() method should be called at the end of the
-    /// region, typically immediately after a forall loop. Nested invocations
-    /// are not allowed i.e. If start() is called after another call to start()
-    /// but before any call to stop(), it will be ignored.
-    typedef struct Timer {
-      /// The name of the region with which this timer is associated (typically
-      /// the name of a kernel).
-      const char *name;
+/// A simple timer class that is intended for timing and to keep track of
+/// statistics. Each instance of this class is intended to record the
+/// execution time of some  named region. The start() method should be
+/// called just before the region of interest in the code is entered (which,
+/// in the case of the benchmarks in the kitsune test suite is typically a
+/// forall loop). The stop() method should be called at the end of the
+/// region, typically immediately after a forall loop. Nested invocations
+/// are not allowed i.e. If start() is called after another call to start()
+/// but before any call to stop(), it will be ignored.
+typedef struct Timer {
+  /// The name of the region with which this timer is associated (typically
+  /// the name of a kernel).
+  const char *name;
 
-      /// Execution time statistics
-      Stats stats;
-    } Timer;
+  /// Execution time statistics
+  Stats stats;
+} Timer;
 
-    // TODO: Implement timing for C
+// TODO: Implement timing for C
 
 #endif // __cplusplus
 

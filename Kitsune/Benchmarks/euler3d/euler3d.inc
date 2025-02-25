@@ -15,6 +15,31 @@ extern int optind, opterr, optopt;
 } // extern "C"
 #endif // __cplusplus
 
+struct Float3 {
+  float x, y, z;
+};
+
+#define block_length 1
+
+/*
+ * Options
+ *
+ */
+#define GAMMA 1.4
+#define NDIM 3
+#define NNB 4
+#define RK 3 // 3rd order RK
+#define ff_mach 1.2
+#define deg_angle_of_attack 0.0f
+
+/*
+ * not options
+ */
+#define VAR_DENSITY 0
+#define VAR_MOMENTUM 1
+#define VAR_DENSITY_ENERGY (VAR_MOMENTUM + NDIM)
+#define NVAR (VAR_DENSITY_ENERGY + 1)
+
 static const char *usage = "euler3d [OPTIONS] <domain> [iters]\n"
                            "Try `euler3d -h` for more information";
 
@@ -31,6 +56,7 @@ static const char *help =
   "    -g <FILE>  The path to the reference output file on a GPU. If srad was\n"
   "               built with a CPU tapir target, this option is ignored\n"
   "    -h         Print help and exit\n"
+  "    -j         Print the recorded times in JSON\n"
   "    -t <N>     Number of threads per block on the GPU. This is only used\n"
   "               by the .cu and .hip implementations of this benchmark [256]\n"
   "\n"
@@ -82,7 +108,7 @@ static void parseCommandLineInto(int argc, char *argv[],
       }
       break;
     default:
-      std::cout << "ERROR: Unknown option '" << optopt << "'\n";
+      std::cout << "ERROR: Unknown option -'" << (char)optopt << "'\n";
       std::cout << "\n";
       std::cout << usage << "\n";
       exit(1);
@@ -110,7 +136,7 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                   IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE, int rows,
                   int cols) {
   int size_I = rows * cols;
-#ifdef IS_CUDA
+#if defined(IS_CUDA)
   cudaMallocManaged(&I, size_I * sizeof(float));
   cudaMallocManaged(&J, size_I * sizeof(float));
   cudaMallocManaged(&c, size_I * sizeof(float));
@@ -122,7 +148,7 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   cudaMallocManaged(&dS, size_I * sizeof(float));
   cudaMallocManaged(&dW, size_I * sizeof(float));
   cudaMallocManaged(&dE, size_I * sizeof(float));
-#elifdef IS_HIP
+#elif defined(IS_HIP)
   hipMallocManaged(&I, size_I * sizeof(float));
   hipMallocManaged(&J, size_I * sizeof(float));
   hipMallocManaged(&c, size_I * sizeof(float));
@@ -171,9 +197,9 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
             Float3 &ff_flux_contribution_density_energy, int &nel, int &nelr,
             const std::string &domainFile) {
 // these need to be computed the first time in order to compute time step
-#ifdef IS_CUDA
+#if defined(IS_CUDA)
   cudaMalloc(&ff_variable, NVAR * sizeof(float));
-#elif IS_HIP
+#elif defined(IS_HIP)
   hipMalloc(&ff_variable, NVAR * sizeof(float));
 #else
   ff_variable.alloc(NVAR);
@@ -219,7 +245,7 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
   nelr =
       block_length * ((nel / block_length) + std::min(1, nel % block_length));
 
-#ifdef IS_CUDA
+#if defined(IS_CUDA)
   cudaMalloc(&areas, nelr * sizeof(float));
   cudaMalloc(&elements_surrounding_elements, nelr * NNB * sizeof(int));
   cudaMalloc(&normals, nelr * NDIM * NNB * sizeof(float));
@@ -227,7 +253,7 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
   cudaMalloc(&old_variables, nelr * NVAR * sizeof(float));
   cudaMalloc(&fluxes, nelr * NVAR * sizeof(float));
   cudaMalloc(&step_factors, nelr * sizeof(float));
-#elifdef IS_HIP
+#elif defined(IS_HIP)
   hipMalloc(&areas, nelr * sizeof(float));
   hipMalloc(&elements_surrounding_elements, nelr * NNB * sizeof(int));
   hipMalloc(&normals, nelr * NDIM * NNB * sizeof(float));
@@ -277,7 +303,7 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
   }
 
   std::cout << "  done.\n\n";
-  std::cout << "  Starting benchmark...\n" << std::flush;
+  std::cout << "  Starting benchmark ... " << std::flush;
 }
 
 static bool check(const std::string &out_file, const std::string &check_file) {
@@ -350,7 +376,7 @@ static void dealloc(FArr &ff_variable, FArr &areas,
                     IArr &elements_surrounding_elements, FArr &normals,
                     FArr &variables, FArr &old_variables, FArr &fluxes,
                     FArr &step_factors) {
-#ifdef IS_CUDA
+#if defined(IS_CUDA)
   cudaFree(ff_variable);
   cudaFree(areas);
   cudaFree(elements_surrounding_elements);
@@ -359,7 +385,7 @@ static void dealloc(FArr &ff_variable, FArr &areas,
   cudaFree(old_variables);
   cudaFree(fluxes);
   cudaFree(step_factors);
-#elifdef IS_HIP
+#elif defined(IS_HIP)
   hipFree(ff_variable);
   hipFree(areas);
   hipFree(elements_surrounding_elements);
@@ -387,6 +413,10 @@ static bool footer(const TimerGroup &tg, FArr &ff_variable, FArr &areas,
                    FArr &step_factors, int nel, int nelr,
                    const std::string &outFile, const std::string &cpuRefFile,
                    const std::string &gpuRefFile) {
+  std::cout << "done\n\n";
+  tg.prettyTimes(std::cout, 4);
+  std::cout << "----\n\n";
+
   save(outFile, variables, nel, nelr);
 
   std::string checkFile = cpuRefFile;

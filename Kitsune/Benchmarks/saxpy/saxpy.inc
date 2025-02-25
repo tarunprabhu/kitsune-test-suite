@@ -27,6 +27,7 @@ static const char *help =
   "OPTIONS\n"
   "\n"
   "    -h       Print help and exit\n"
+  "    -j       Print the recorded times in JSON\n"
   "    -t <N>   Number of threads per block on the GPU. This is only relevant\n"
   "             for the .cu and .hip implementations of this benchmark [256]\n"
   "\n"
@@ -89,15 +90,6 @@ static void parseCommandLineInto(int argc, char *argv[], size_t &n,
   }
 }
 
-template <typename Arr> static void randomFill(Arr &arr, size_t n) {
-  srand(7);
-  for (size_t i = 0; i < n; ++i) {
-    ElementType r1 = rand();
-    ElementType r2 = rand();
-    arr[i] = (r1 / RAND_MAX) * r2;
-  }
-}
-
 template <typename Arr>
 static size_t check(ElementType a, const Arr &x, const Arr &y, const Arr &r,
                     size_t n) {
@@ -122,9 +114,9 @@ template <typename Arr> static void alloc(Arr &x, Arr &y, Arr &r, size_t n) {
   cudaMallocManaged(&y, n * sizeof(ElementType));
   cudaMallocManaged(&r, n * sizeof(ElementType));
 #elif defined(IS_HIP)
-  HIPCHECK(hipMallocManaged(&x, n * sizeof(ElementType)));
-  HIPCHECK(hipMallocManaged(&y, n * sizeof(ElementType)));
-  HIPCHECK(hipMallocManaged(&r, n * sizeof(ElementType)));
+  hipMallocManaged(&x, n * sizeof(ElementType));
+  hipMallocManaged(&y, n * sizeof(ElementType));
+  hipMallocManaged(&r, n * sizeof(ElementType));
 #else
   x.alloc(n);
   y.alloc(n);
@@ -143,8 +135,6 @@ static void header(const std::string &label, ElementType a, Arr &x, Arr &y,
             << std::flush;
 
   alloc(x, y, r, n);
-  randomFill(x, n);
-  randomFill(y, n);
 
   std::cout << "  done.\n\n";
   std::cout << "  Starting benchmark...\n\n";

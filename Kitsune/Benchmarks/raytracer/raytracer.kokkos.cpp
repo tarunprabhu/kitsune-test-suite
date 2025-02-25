@@ -12,10 +12,6 @@
 namespace fs = std::filesystem;
 using namespace kitsune;
 
-struct Pixel {
-  unsigned char r, g, b;
-};
-
 struct Vec {
   float x, y, z;
   KOKKOS_FORCEINLINE_FUNCTION Vec(float v = 0) { x = y = z = v; }
@@ -38,23 +34,7 @@ struct Vec {
   }
 };
 
-static size_t check(const std::string &outFile, const std::string &checkFile) {
-  size_t mismatch = 0;
-  if (not checkFile.empty()) {
-    std::ifstream imgActual(outFile);
-    std::ifstream imgExpected(checkFile);
-    while (not imgActual.eof() and not imgExpected.eof()) {
-      char actual, expected;
-      imgActual.get(actual);
-      imgExpected.get(expected);
-      if (actual != expected) {
-        mismatch = imgExpected.tellg();
-        break;
-      }
-    }
-  }
-  return mismatch;
-}
+#include "raytracer.inc"
 
 KOKKOS_FORCEINLINE_FUNCTION
 static float randomVal(unsigned int &x) {
@@ -73,11 +53,6 @@ static float boxTest(const Vec &position, Vec lowerLeft, Vec upperRight) {
       fminf(fminf(lowerLeft.x, upperRight.x), fminf(lowerLeft.y, upperRight.y)),
       fminf(lowerLeft.z, upperRight.z));
 }
-
-#define HIT_NONE 0
-#define HIT_LETTER 1
-#define HIT_WALL 2
-#define HIT_SUN 3
 
 // Sample the world using Signed Distance Fields.
 KOKKOS_FORCEINLINE_FUNCTION
@@ -201,33 +176,32 @@ KOKKOS_FORCEINLINE_FUNCTION static Vec trace(Vec origin, Vec direction,
 }
 
 int main(int argc, char **argv) {
-  if (argc != 5) {
-    std::cerr << "USAGE: raytracer <samples> <width> <height> <check-file>"
-              << std::endl;
-    return 1;
-  }
+  unsigned sampleCount;
+  unsigned imageWidth;
+  unsigned imageHeight;
+  std::string imgFile;
+  std::string outFile;
+  std::string cpuRefFile;
+  std::string gpuRefFile;
+  mobile_ptr<Pixel> img;
+  mobile_ptr<Vec> rawImg;
+  int mismatch;
 
-  Timer main("main");
-  unsigned int sampleCount = std::stoi(argv[1]);
-  unsigned int imageWidth = std::stoi(argv[2]);
-  unsigned int imageHeight = std::stoi(argv[3]);
-  std::string checkFile = argv[4];
-  std::string outFile = fs::path(argv[0]).filename().string() + ".ppm";
+  parseCommandLineInto(argc, argv, sampleCount, imageWidth, imageHeight,
+                       imgFile, outFile, cpuRefFile, gpuRefFile);
 
-  std::cout << "---- Raytracer benchmark (kokkos) ----\n"
-            << "  Image size    : " << imageWidth << "x" << imageHeight << "\n"
-            << "  Samples/pixel : " << sampleCount << "\n\n";
+  TimerGroup tg("raytracer");
+  Timer &main = tg.add("main", "Total");
 
-  std::cout << "  Allocating image..." << std::flush;
+  header("forall", img, rawImg, sampleCount, imageWidth, imageHeight);
 
   Kokkos::initialize(argc, argv);
   {
-    unsigned int totalPixels = imageWidth * imageHeight;
-    mobile_ptr<Pixel> img(totalPixels);
+    // FIXME: Kokkos cannot deal with the mobile_ptr type for ... reasons.
+    // We could try to find a way to make that type Kokkos-friendly.
     Pixel *[[kitsune::mobile]] img_p = img.get();
-    std::cout << "  done.\n\n";
-
-    std::cout << "  Running benchmark ... " << std::flush;
+    Vec *[[kitsune::mobile]] rawImg_p = rawImg.get();
+    unsigned totalPixels = imageWidth * imageHeight;
 
     main.start();
     // clang-format off
@@ -256,8 +230,13 @@ int main(int argc, char **argv) {
       }
       // Reinhard tone mapping
       color = color * (1.0f / sampleCount) + 14.0f / 241.0f;
+
+      // Save the pre-quantized image.
+      rawImg_p[i] = color;
+
       Vec o = color + 1.0f;
       color = Vec(color.x / o.x, color.y / o.y, color.z / o.z) * 255.0f;
+
       img_p[i].r = (unsigned char)color.x;
       img_p[i].g = (unsigned char)color.y;
       img_p[i].b = (unsigned char)color.z;
@@ -265,33 +244,109 @@ int main(int argc, char **argv) {
     // clang-format on
 
     Kokkos::fence(); // synchronize between host and device.
-    uint64_t us = main.stop();
+    main.stop();
 
-    std::cout << "done\n";
-    std::cout << "\n\n  Total time: " << us << " us\n";
-
-    std::cout << "  Saving image ... " << std::flush;
-    std::ofstream imgFile(outFile);
-    if (imgFile.is_open()) {
-      imgFile << "P6 " << imageWidth << " " << imageHeight << " 255 ";
-      for (int i = totalPixels - 1; i >= 0; i--)
-        imgFile << img[i].r << img[i].g << img[i].b;
-      imgFile.close();
-    }
-    std::cout << "done\n\n";
-
-    img.free();
+    mismatch = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,
+                      outFile, cpuRefFile, gpuRefFile);
   }
   Kokkos::finalize();
 
-  std::cout << "\n  Checking final result..." << std::flush;
-  size_t mismatch = check(outFile, checkFile);
-  if (mismatch)
-    std::cout << "  FAIL! (Mismatch at byte " << mismatch << ")\n\n";
-  else
-    std::cout << "  pass\n\n";
-
-  json(std::cout, {main});
-
   return mismatch;
 }
+
+// int main(int argc, char **argv) {
+//   if (argc != 5) {
+//     std::cerr << "USAGE: raytracer <samples> <width> <height> <check-file>"
+//               << std::endl;
+//     return 1;
+//   }
+
+//   Timer main("main");
+//   unsigned int sampleCount = std::stoi(argv[1]);
+//   unsigned int imageWidth = std::stoi(argv[2]);
+//   unsigned int imageHeight = std::stoi(argv[3]);
+//   std::string checkFile = argv[4];
+//   std::string outFile = fs::path(argv[0]).filename().string() + ".ppm";
+
+//   std::cout << "---- Raytracer benchmark (kokkos) ----\n"
+//             << "  Image size    : " << imageWidth << "x" << imageHeight <<
+//             "\n"
+//             << "  Samples/pixel : " << sampleCount << "\n\n";
+
+//   std::cout << "  Allocating image..." << std::flush;
+
+//   Kokkos::initialize(argc, argv);
+//   {
+//     unsigned int totalPixels = imageWidth * imageHeight;
+//     mobile_ptr<Pixel> img(totalPixels);
+//     Pixel *[[kitsune::mobile]] img_p = img.get();
+//     std::cout << "  done.\n\n";
+
+//     std::cout << "  Running benchmark ... " << std::flush;
+
+//     main.start();
+//     // clang-format off
+//     Kokkos::parallel_for(totalPixels, KOKKOS_LAMBDA(const unsigned int i) {
+//       int x = i % imageWidth;
+//       int y = i / imageWidth;
+//       const Vec position(-12.0f, 5.0f, 25.0f);
+//       const Vec goal = !(Vec(-3.0f, 4.0f, 0.0f) + position * -1.0f);
+//       const Vec left = !Vec(goal.z, 0, -goal.x) * (1.0f / imageWidth);
+//       // Cross-product to get the up vector
+//       const Vec up(goal.y * left.z - goal.z * left.y,
+//                    goal.z * left.x - goal.x * left.z,
+//                    goal.x * left.y - goal.y * left.x);
+//       Vec color;
+//       for (unsigned int p = sampleCount, v = i; p--;) {
+//         Vec rand_left =
+//           Vec(randomVal(v), randomVal(v), randomVal(v)) * .001;
+//         float xf = x + randomVal(v);
+//         float yf = y + randomVal(v);
+//         color = color +
+//           trace(position,
+//                 !((goal + rand_left) +
+//                   left * ((xf - imageWidth / 2.0f) + randomVal(v)) +
+//                   up * ((yf - imageHeight / 2.0f) + randomVal(v))),
+//                 v);
+//       }
+//       // Reinhard tone mapping
+//       color = color * (1.0f / sampleCount) + 14.0f / 241.0f;
+//       Vec o = color + 1.0f;
+//       color = Vec(color.x / o.x, color.y / o.y, color.z / o.z) * 255.0f;
+//       img_p[i].r = (unsigned char)color.x;
+//       img_p[i].g = (unsigned char)color.y;
+//       img_p[i].b = (unsigned char)color.z;
+//     });
+//     // clang-format on
+
+//     Kokkos::fence(); // synchronize between host and device.
+//     uint64_t us = main.stop();
+
+//     std::cout << "done\n";
+//     std::cout << "\n\n  Total time: " << us << " us\n";
+
+//     std::cout << "  Saving image ... " << std::flush;
+//     std::ofstream imgFile(outFile);
+//     if (imgFile.is_open()) {
+//       imgFile << "P6 " << imageWidth << " " << imageHeight << " 255 ";
+//       for (int i = totalPixels - 1; i >= 0; i--)
+//         imgFile << img[i].r << img[i].g << img[i].b;
+//       imgFile.close();
+//     }
+//     std::cout << "done\n\n";
+
+//     img.free();
+//   }
+//   Kokkos::finalize();
+
+//   std::cout << "\n  Checking final result..." << std::flush;
+//   size_t mismatch = check(outFile, checkFile);
+//   if (mismatch)
+//     std::cout << "  FAIL! (Mismatch at byte " << mismatch << ")\n\n";
+//   else
+//     std::cout << "  pass\n\n";
+
+//   json(std::cout, {main});
+
+//   return mismatch;
+// }

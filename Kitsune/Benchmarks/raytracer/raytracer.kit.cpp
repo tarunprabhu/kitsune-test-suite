@@ -11,16 +11,6 @@
 namespace fs = std::filesystem;
 using namespace kitsune;
 
-struct Pixel {
-  unsigned char r, g, b;
-};
-
-// The pre-quantized pixel value. Maybe this is easier to use when comparing
-// results.
-struct FPPixel {
-  float r, g, b;
-};
-
 struct Vec {
   float x, y, z;
   __attribute__((always_inline)) Vec(float v = 0) { x = y = z = v; }
@@ -43,74 +33,7 @@ struct Vec {
   }
 };
 
-static size_t check(const std::string &outFile, const std::string &checkFile)
-{
-  size_t mismatch = 0;
-  if (not checkFile.empty()) {
-    std::ifstream imgActual(outFile);
-    std::ifstream imgExpected(checkFile);
-    while (not imgActual.eof() and not imgExpected.eof()) {
-      char actual, expected;
-      imgActual.get(actual);
-      imgExpected.get(expected);
-      if (actual != expected) {
-        mismatch = imgExpected.tellg();
-        break;
-      }
-    }
-  }
-  return mismatch;
-}
-
-// // If there is a mismatch in the output, return the pixel at which the output
-// // did not match. If the size of the image does not match, return -1. If the
-// // output matches, return 0.
-// static size_t check(const std::string &outFile, const std::string &checkFile) {
-//   const float epsilon = 1e-2;
-
-//   FILE *fa = fopen(outFile.c_str(), "rb");
-//   FILE *fe = fopen(checkFile.c_str(), "rb");
-
-//   unsigned ew, aw;
-//   unsigned eh, ah;
-//   fread(&ew, sizeof(unsigned), 1, fe);
-//   fread(&eh, sizeof(unsigned), 1, fe);
-//   fread(&aw, sizeof(unsigned), 1, fa);
-//   fread(&ah, sizeof(unsigned), 1, fa);
-//   if (ew != aw or eh != ah)
-//     return -1;
-
-//   FPPixel *ev = (FPPixel *)malloc(sizeof(FPPixel) * ew * eh);
-//   FPPixel *av = (FPPixel *)malloc(sizeof(FPPixel) * aw * ah);
-
-//   size_t re = fread(ev, sizeof(FPPixel), ew * eh, fe);
-//   size_t ra = fread(av, sizeof(FPPixel), aw * ah, fa);
-//   if (re != ra)
-//     return -2;
-
-//   for (unsigned i = 0; i < ew * eh; ++i) {
-//     const FPPixel *ep = &ev[i];
-//     const FPPixel *ap = &av[i];
-
-//     if (fabs(ev[i].r - av[i].r) > epsilon or
-//         fabs(ev[i].g - av[i].g) > epsilon or
-//         fabs(ev[i].b - av[i].b) > epsilon) {
-//       // std::cerr << std::endl
-//       //           << i << " (" << i / ew << ", " << i % ew
-//       //           << "): " << fabs(ev[i].r - av[i].r) << " "
-//       //           << fabs(ev[i].g - av[i].g) << " " << fabs(ev[i].b - av[i].b)
-//       //           << " with epsilon = " << epsilon;
-//       return i + 1;
-//     }
-//   }
-
-//   free(ev);
-//   free(av);
-//   fclose(fe);
-//   fclose(fa);
-
-//   return 0;
-// }
+#include "raytracer.inc"
 
 inline __attribute__((always_inline)) static float randomVal(unsigned int &x) {
   x = (214013 * x + 2531011);
@@ -128,11 +51,6 @@ boxTest(const Vec &position, Vec lowerLeft, Vec upperRight) {
       fminf(fminf(lowerLeft.x, upperRight.x), fminf(lowerLeft.y, upperRight.y)),
       fminf(lowerLeft.z, upperRight.z));
 }
-
-#define HIT_NONE 0
-#define HIT_LETTER 1
-#define HIT_WALL 2
-#define HIT_SUN 3
 
 // Sample the world using Signed Distance Fields.
 inline __attribute__((always_inline)) static float
@@ -252,36 +170,26 @@ inline __attribute__((always_inline)) Vec trace(Vec origin, Vec direction,
 }
 
 int main(int argc, char **argv) {
-  if (argc != 5) {
-    std::cerr << "USAGE: raytracer <samples> <width> <height> <check-file>"
-              << std::endl;
-    return 1;
-  }
+  unsigned sampleCount;
+  unsigned imageWidth;
+  unsigned imageHeight;
+  std::string imgFile;
+  std::string outFile;
+  std::string cpuRefFile;
+  std::string gpuRefFile;
+  mobile_ptr<Pixel> img;
+  mobile_ptr<Vec> rawImg;
 
-  Timer main("main");
-  unsigned int sampleCount = std::stoi(argv[1]);
-  unsigned int imageWidth = std::stoi(argv[2]);
-  unsigned int imageHeight = std::stoi(argv[3]);
-  std::string checkFile = argv[4];
-  std::string outImg = fs::path(argv[0]).filename().string() + ".ppm";
-  std::string outFile = fs::path(argv[0]).filename().string() + ".dat";
+  parseCommandLineInto(argc, argv, sampleCount, imageWidth, imageHeight,
+                       imgFile, outFile, cpuRefFile, gpuRefFile);
 
-  std::cout << "\n";
-  std::cout << "---- Raytracer benchmark (forall) ----\n"
-            << "  Image size    : " << imageWidth << "x" << imageHeight << "\n"
-            << "  Samples/pixel : " << sampleCount << "\n\n";
+  TimerGroup tg("raytracer");
+  Timer &main = tg.add("main", "Total");
 
-  std::cout << "  Allocating image..." << std::flush;
-  unsigned int totalPixels = imageWidth * imageHeight;
-  mobile_ptr<Pixel> img(totalPixels);
-  mobile_ptr<FPPixel> fpimg(totalPixels);
-
-  std::cout << "  done.\n\n";
-
-  std::cout << "  Running benchmark ... " << std::flush;
+  header("forall", img, rawImg, sampleCount, imageWidth, imageHeight);
 
   main.start();
-  forall(unsigned int i = 0; i < totalPixels; ++i) {
+  forall(unsigned int i = 0; i < imageWidth * imageHeight; ++i) {
     int x = i % imageWidth;
     int y = i / imageWidth;
 
@@ -307,9 +215,7 @@ int main(int argc, char **argv) {
     color = color * (1.0f / sampleCount) + 14.0f / 241.0f;
 
     // Save the pre-quantized image.
-    fpimg[i].r = color.x;
-    fpimg[i].g = color.y;
-    fpimg[i].b = color.z;
+    rawImg[i] = color;
 
     Vec o = color + 1.0f;
     color = Vec(color.x / o.x, color.y / o.y, color.z / o.z) * 255.0f;
@@ -317,42 +223,9 @@ int main(int argc, char **argv) {
     img[i].g = (unsigned char)color.y;
     img[i].b = (unsigned char)color.z;
   }
-  uint64_t us = main.stop();
+  main.stop();
 
-  std::cout << "done\n";
-  std::cout << "\n\n  Total time: " << us << " us\n";
-
-  std::cout << "  Saving image ... " << std::flush;
-  std::ofstream imgFile(outImg);
-  if (imgFile.is_open()) {
-    imgFile << "P6 " << imageWidth << " " << imageHeight << " 255 ";
-    for (int i = totalPixels - 1; i >= 0; i--)
-      imgFile << img[i].r << img[i].g << img[i].b;
-    imgFile.close();
-  }
-  std::cout << "done\n\n";
-
-  FILE *fp = fopen(outFile.c_str(), "wb");
-  fwrite(&imageWidth, sizeof(unsigned), 1, fp);
-  fwrite(&imageHeight, sizeof(unsigned), 1, fp);
-  fwrite((void*)fpimg.get(), sizeof(FPPixel), totalPixels, fp);
-  fclose(fp);
-
-  std::cout << "\n  Checking final result..." << std::flush;
-  size_t mismatch = check(outImg, checkFile);
-  if (mismatch == -2)
-    std::cout << "  FAIL! (File size mismatch)\n\n";
-  else if (mismatch == -1)
-    std::cout << "  FAIL! (Image size mismatch)\n\n";
-  else if (mismatch)
-    std::cout << "  FAIL! (Mismatch at pixel " << mismatch << ")\n\n";
-  else
-    std::cout << "  pass\n\n";
-
-  json(std::cout, {main});
-
-  img.free();
-  fpimg.free();
-
+  int mismatch = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,
+                        outFile, cpuRefFile, gpuRefFile);
   return mismatch;
 }
