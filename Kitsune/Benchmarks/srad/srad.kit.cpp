@@ -25,11 +25,11 @@ int main(int argc, char *argv[]) {
   std::string outFile;
 
   TimerGroup tg("srad");
-  Timer &main = tg.add("main");
-  Timer &init = tg.add("init");
-  Timer &iters = tg.add("iters");
-  Timer &loop1 = tg.add("loop1");
-  Timer &loop2 = tg.add("loop2");
+  Timer &main = tg.add("main", "Total");
+  Timer &init = tg.add("init", "Init");
+  Timer &iters = tg.add("iters", "Compute");
+  Timer &loop1 = tg.add("loop1", "Loop 1");
+  Timer &loop2 = tg.add("loop2", "Loop 2");
 
   parseCommandLineInto(argc, argv, niter, rows, cols, r1, r2, c1, c2, lambda,
                        cpuRefFile, gpuRefFile);
@@ -135,14 +135,6 @@ int main(int argc, char *argv[]) {
   }
   iters.stop();
   main.stop();
-
-  std::cout << "\n"
-            << "      Total time : " << Timer::secs(main.total()) << "\n"
-            << "       Init time : " << Timer::secs(init.total()) << "\n"
-            << "    Compute time : " << Timer::secs(iters.total()) << "\n"
-            << "           Loop1 : " << Timer::secs(loop1.total()) << "\n"
-            << "           Loop2 : " << Timer::secs(loop2.total()) << "\n"
-            << "----\n\n";
 
   size_t mismatch = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows,
                            cols, outFile, cpuRefFile, gpuRefFile);

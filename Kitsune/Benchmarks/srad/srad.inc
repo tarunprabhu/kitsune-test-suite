@@ -32,6 +32,7 @@ static const char *help =
   "    -g <FILE>  The path to the reference output file on a GPU. If srad was\n"
   "               built with a CPU tapir target, this option is ignored\n"
   "    -h         Print help and exit\n"
+  "    -j         Print the recorded times in JSON\n"
   "    -t <N>     Number of threads per block on the GPU. This is only used\n"
   "               by the .cu and .hip implementations of this benchmark [256]\n"
   "\n"
@@ -152,7 +153,7 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                   IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE, int rows,
                   int cols) {
   int size_I = rows * cols;
-#ifdef IS_CUDA
+#if defined(IS_CUDA)
   cudaMallocManaged(&I, size_I * sizeof(float));
   cudaMallocManaged(&J, size_I * sizeof(float));
   cudaMallocManaged(&c, size_I * sizeof(float));
@@ -164,7 +165,7 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   cudaMallocManaged(&dS, size_I * sizeof(float));
   cudaMallocManaged(&dW, size_I * sizeof(float));
   cudaMallocManaged(&dE, size_I * sizeof(float));
-#elifdef IS_HIP
+#elif defined(IS_HIP)
   hipMallocManaged(&I, size_I * sizeof(float));
   hipMallocManaged(&J, size_I * sizeof(float));
   hipMallocManaged(&c, size_I * sizeof(float));
@@ -209,7 +210,7 @@ static void header(const std::string &label, FArr &I, FArr &J, FArr &c,
   randomFill(I, rows, cols);
 
   std::cout << "  done.\n\n";
-  std::cout << "  Starting benchmark...\n\n";
+  std::cout << "  Starting benchmark ... " << std::flush;
 }
 
 static size_t check(const std::string &outFile, const std::string &checkFile,
@@ -258,7 +259,7 @@ static size_t check(const std::string &outFile, const std::string &checkFile,
 template <typename FArr, typename IArr>
 static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                     IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE) {
-#ifdef IS_CUDA
+#if defined(IS_CUDA)
   cudaFree(&I);
   cudaFree(&J);
   cudaFree(&c);
@@ -270,7 +271,7 @@ static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   cudaFree(&dS);
   cudaFree(&dW);
   cudaFree(&dE);
-#elifdef IS_HIP
+#elif defined(IS_HIP)
   hipFree(&I);
   hipFree(&J);
   hipFree(&c);
@@ -303,6 +304,10 @@ static size_t footer(TimerGroup &tg, FArr &I, FArr &J, FArr &c, IArr &iN,
                      FArr &dE, int rows, int cols, const std::string &outFile,
                      const std::string &cpuRefFile,
                      const std::string &gpuRefFile) {
+  std::cout << "done\n\n";
+  tg.prettyTimes(std::cout, 4);
+  std::cout << "----\n\n";
+
   FILE *fp = fopen(outFile.c_str(), "wb");
   fwrite(&*J, sizeof(float), rows * cols, fp);
   fclose(fp);
