@@ -53,9 +53,10 @@ static bool showJSON = false;
 
 static void parseCommandLineInto(int argc, char *argv[], int &niter, int &rows,
                                  int &cols, int &r1, int &r2, int &c1, int &c2,
-                                 float &lambda, std::string &cpuRefFile,
+                                 float &lambda, std::string &outFile,
+                                 std::string &cpuRefFile,
                                  std::string &gpuRefFile,
-                                 unsigned *tpb = nullptr) {
+                                 unsigned *threadsPerBlock = nullptr) {
   niter = 2000;
   rows = 6400;
   cols = 6400;
@@ -66,10 +67,11 @@ static void parseCommandLineInto(int argc, char *argv[], int &niter, int &rows,
   lambda = 0.5;
   cpuRefFile = "";
   gpuRefFile = "";
-  if (tpb) {
+  if (threadsPerBlock) {
     // This is loosely for consistency with the launch parameters from kitsune.
-    *tpb = 256;
+    *threadsPerBlock = 256;
   }
+  outFile = fs::path(argv[0]).filename().string() + ".dat";
 
   char flag;
   while ((flag = getopt(argc, argv, "c:g:hjt:")) != -1) {
@@ -87,8 +89,8 @@ static void parseCommandLineInto(int argc, char *argv[], int &niter, int &rows,
       showJSON = true;
       break;
     case 't':
-      if (tpb) {
-        *tpb = std::stoi(optarg);
+      if (threadsPerBlock) {
+        *threadsPerBlock = std::stoi(optarg);
       } else {
         std::cout << "-------------------------------------------------\n";
         std::cout << " WARNING: Ignoring threads-per-block option (-t) \n";
@@ -101,6 +103,10 @@ static void parseCommandLineInto(int argc, char *argv[], int &niter, int &rows,
       std::cout << usage << "\n";
       exit(1);
     }
+  }
+
+  if (threadsPerBlock) {
+    std::cout << "Threads per block = " << *threadsPerBlock << "\n";
   }
 
   char **args = &argv[optind];
@@ -138,12 +144,11 @@ static void parseCommandLineInto(int argc, char *argv[], int &niter, int &rows,
 }
 
 template <typename Arr> static void randomFill(Arr &I, int rows, int cols) {
-  srand(7);
-  for (unsigned int i = 0; i < rows; i++) {
-    for (unsigned int j = 0; j < cols; j++) {
+  for (int i = 0; i < rows; i++) {
+    for (int j = 0; j < cols; j++) {
       float r1 = rand();
       float r2 = rand();
-      I[i * cols + j] = (r1 / RAND_MAX) * r2;
+      I[i * cols + j] = (r1 / float(RAND_MAX)) * r2;
     }
   }
 }
@@ -195,7 +200,11 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
 template <typename FArr, typename IArr>
 static void header(const std::string &label, FArr &I, FArr &J, FArr &c,
                    IArr &iN, IArr &iS, IArr &jE, IArr &jW, FArr &dN, FArr &dS,
-                   FArr &dW, FArr &dE, int rows, int cols, int niter) {
+                   FArr &dW, FArr &dE, int &size_I, int &size_R, int rows,
+                   int cols, int r1, int r2, int c1, int c2, int niter) {
+  size_I = cols * rows;
+  size_R = (r2 - r1 + 1) * (c2 - c1 + 1);
+
   srand(7);
   std::cout << "\n";
   std::cout << "---- srad benchmark (" << label << ") ----\n"
@@ -213,16 +222,20 @@ static void header(const std::string &label, FArr &I, FArr &J, FArr &c,
   std::cout << "  Starting benchmark ... " << std::flush;
 }
 
-static size_t check(const std::string &outFile, const std::string &checkFile,
-                    int n) {
+// Returns -1 if the sizes of the files mismatch. If the files are identical,
+// returns 0. Otherwise returns the index of the float that mismatched.
+static int check(const std::string &outFile, const std::string &checkFile,
+                 int n) {
   float epsilon = 1e-6;
   FILE *fa = fopen(outFile.c_str(), "rb");
   FILE *fe = fopen(checkFile.c_str(), "rb");
   float *ev = (float *)malloc(n * sizeof(float));
   float *av = (float *)malloc(n * sizeof(float));
 
-  fread(ev, sizeof(float), n, fe);
-  fread(av, sizeof(float), n, fa);
+  int ne = fread(ev, sizeof(float), n, fe);
+  int na = fread(av, sizeof(float), n, fa);
+  if (ne != na && na != n * sizeof(float))
+    return -1;
   for (int i = 0; i < n; ++i)
     if (fabs(ev[i] - av[i]) > epsilon)
       return i + 1;
@@ -238,9 +251,9 @@ static size_t check(const std::string &outFile, const std::string &checkFile,
   return 0;
 }
 
-static size_t check(const std::string &outFile, const std::string &checkFile,
-                    int rows, int cols) {
-  size_t mismatch = 0;
+static int check(const std::string &outFile, const std::string &checkFile,
+                 int rows, int cols) {
+  int mismatch = 0;
   if (not checkFile.size()) {
     std::cout << "--------------------------------------------------\n";
     std::cout << " WARNING: Not checking output (no reference file) \n";

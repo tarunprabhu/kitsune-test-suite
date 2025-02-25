@@ -10,16 +10,13 @@ using namespace kitsune;
 #include "srad.inc"
 
 int main(int argc, char *argv[]) {
-  int rows, cols, size_I, size_R, niter;
   mobile_ptr<float> I, J;
-  float q0sqr, tmp, meanROI, varROI;
-  float Jc, G2, L, num, den, qsqr;
   mobile_ptr<int> iN, iS, jE, jW;
   mobile_ptr<float> dN, dS, dW, dE;
-  int r1, r2, c1, c2;
-  float cN, cS, cW, cE;
-  float D;
   mobile_ptr<float> c;
+  int rows, cols, size_I, size_R, niter;
+  float q0sqr, tmp, meanROI, varROI;
+  int r1, r2, c1, c2;
   float lambda;
   std::string cpuRefFile, gpuRefFile;
   std::string outFile;
@@ -32,12 +29,9 @@ int main(int argc, char *argv[]) {
   Timer &loop2 = tg.add("loop2", "Loop 2");
 
   parseCommandLineInto(argc, argv, niter, rows, cols, r1, r2, c1, c2, lambda,
-                       cpuRefFile, gpuRefFile);
-  header("forall", I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows, cols, niter);
-
-  outFile = fs::path(argv[0]).filename().string() + ".dat";
-  size_I = cols * rows;
-  size_R = (r2 - r1 + 1) * (c2 - c1 + 1);
+                       outFile, cpuRefFile, gpuRefFile);
+  header("forall", I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, size_I, size_R,
+         rows, cols, r1, r2, c1, c2, niter);
 
   main.start();
   init.start();
@@ -136,7 +130,7 @@ int main(int argc, char *argv[]) {
   iters.stop();
   main.stop();
 
-  size_t mismatch = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows,
-                           cols, outFile, cpuRefFile, gpuRefFile);
+  int mismatch = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows, cols,
+                        outFile, cpuRefFile, gpuRefFile);
   return mismatch;
 }
