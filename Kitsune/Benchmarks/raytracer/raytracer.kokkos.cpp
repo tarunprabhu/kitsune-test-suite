@@ -7,7 +7,8 @@
 #include <fstream>
 #include <iostream>
 #include <kitsune.h>
-#include <timing.h>
+
+#include "timing.h"
 
 namespace fs = std::filesystem;
 using namespace kitsune;

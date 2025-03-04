@@ -2,7 +2,8 @@
 
 #include <iostream>
 #include <kitsune.h>
-#include <timing.h>
+
+#include "timing.h"
 
 using ElementType = float;
 using namespace kitsune;

@@ -2,7 +2,8 @@
 
 #include <hip/hip_runtime.h>
 #include <iostream>
-#include <timing.h>
+
+#include "timing.h"
 
 using ElementType = float;
 

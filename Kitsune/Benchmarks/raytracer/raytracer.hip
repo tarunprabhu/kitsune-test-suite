@@ -4,7 +4,8 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
-#include <timing.h>
+
+#include "timing.h"
 
 #include "raytracer.inc"
 

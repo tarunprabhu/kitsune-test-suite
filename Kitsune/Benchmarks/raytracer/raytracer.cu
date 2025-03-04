@@ -4,7 +4,8 @@
 #include <cuda_runtime.h>
 #include <fstream>
 #include <iostream>
-#include <timing.h>
+
+#include "timing.h"
 
 struct Vec {
   float x, y, z;
