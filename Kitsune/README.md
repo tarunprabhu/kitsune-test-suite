@@ -1,11 +1,15 @@
 # Kitsune-specific tests #
 
 This directory contains end-to-end tests for Kitsune. They are intended to test
-for both correctness and (some) performance regressions. The section for
-[developers](#Developer Guide) contains more information about the test suite
-itself, how it is organized and the contents. The sections on
+for both correctness and (some) performance regressions. The sections on
 [building](#Building) and [running](#Running) the test suite should be
 sufficient to just use the test suite.
+
+The section for [developers](#Developer Guide) contains important information
+about the test suite itself, how it is organized and the contents. The
+organization of the Kitsune tests is somewhat idiosyncratic and relies on file
+names following a strict pattern. Please read that section carefully before
+adding/modifying this test suite.
 
 ## Building ##
 
@@ -45,7 +49,8 @@ frontends for C (`kitcc`) and C++ (`kit++`) are available. A Fortran frontend
 test suite can be restricted to testing only some of the built frontends.
 
 `-DKITSUNE_SKIP_FRONTENDS=<frontends>` can be used to test all frontends that
-have been built _except_ those in `<frontends>`. `<frontends>` is a c
+have been built _except_ those in `<frontends>`. `<frontends>` is a
+semicolon-separated list.
 
 `-DKITSUNE_TEST_FRONTENDS=<frontends>` can be used to test _only_ those
 frontends that have been built _and_ are present in `<frontends>`. `<frontends>`
@@ -122,23 +127,113 @@ and information on how to add new tests.
 
 ## Organization ##
 
-The subdirectories in this test contain equivalent implementations of the same
-test in a number of different languages. Tests which do not contain equivalent
-implementations in different languages may be placed directly in this
-directory.
+All tests should be within one of the three top-level directories, `Benchmarks`,
+`SingleSource` and `MultiSource`.
 
-## Kitsune tests ##
+    - *`SingleSource`* contains single-source tests that are only used for
+      correctness checks and are never used for performance comparisons
 
-The names of test files containing Kitsune-specific extensions must end with
-`.kit.c`, `.kit.cpp`, or `.kit.f90` for C, C++ and Fortran respectively. This
-is simply to distinguish them from any standard C++ (or C) files that may be
-present in the directory. Only the files with this extension will be compiled
-``with all the tapir targets being tested.
+    - *`MultiSource`* contains multi-source tests that are, currently, only used
+      for correctness checks. We may support using these for performance
+      comaprisons at some point, but it is not currently planned
 
-## Kokkos tests ##
+### Benchmarks/ ###
 
-The names of test files containing Kokkos must end with `.kokkos.cpp`. Kitsune's
-`-fkokkos-mode` treats Kokkos as its own language, but the normal file extension
-cannot be used to distinguish such files from normal C++.
+The `Benchmarks/` directory is intended for code that can be used for both
+correctness checks and performance comparisons. All the tests *must* be
+single-source.
 
-[_TODO: Figure out what do with tests that contain Kokkos views_]
+`Benchmarks/` consists of subdirectories, with one subdirectory for each
+benchmark. Each benchmark subdirectory consists of multiple source files.
+Typically, these will be C/C++/Fortran with Kitsune-specific extensions/
+annotations (`.kit.*`), Cuda (`.cu`) and Hip (`.hip`) implementations of the
+exact same program. Standard C++ and Fortran implementations may also be
+present. In addition, there may be "included-source" files (`.inc.*`) which
+are typically `#include`'ed directly into the other source files[^1].
+
+The trailing extensions on the test file names are significant. Files containing
+Kitsune-specific extensions/annotations *must* end with
+`.kit.c`, `.kit.cpp`, or `.kit.f90` for C, C++ and Fortran respectively. Only
+files with this name will be compiled with the various tapir targets being
+tested. Cuda implementations must end with `.cu` and hip implementations must
+end with `.hip`. Tests using Kokkos must end with `.kokkos.cpp` if they are
+intended to be used to test Kitsune's `-fkokkos` mode. These tests can only
+contain Kokkos' `parallel_for` construct. Kokkos views are not currently
+supported.
+
+Each subdirectory within `Benchmarks/` must contain a `CMakeLists.txt` file.
+The following is an example of a `CMakeLists.txt` file for a benchmark that
+is self-contained.
+```
+include(KitsuneTestSuite)
+
+if (KITSUNE_TEST_INPUT_SIZE STREQUAL "small")
+  kitsune_singlesource(CMDARGS 8192)
+elseif (KITSUNE_TEST_INPUT_SIZE STREQUAL "medium")
+  kitsune_singlesource(CMDARGS 268435456)
+else()
+  kitsune_singlesource()
+endif()
+```
+In this case, the test is given a different set of command-line arguments
+depending on the input size specified at configure time. It is recommended for
+a test to be able to support at least the `small` and `medium` input sizes.
+If tests take too long to execute, the correctness checks may take too long on
+certain tapir targets (e.g. the `serial` tapir target), while tests that run
+for a very short time are not useful for performance comparisons because they
+are very susceptible to system noise.
+
+The following is an example of a `CMakeLists.txt` file for a benchmark that
+compares its output against a reference output.
+```
+include(KitsuneTestSuite)
+file(COPY lit.local.cfg DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+set(check_file_base "refout")
+if (KITSUNE_TEST_INPUT_SIZE STREQUAL "${check_file_base}")
+  kitsune_singlesource(
+    CMDARGS 640 640
+    REFOUT "${check_file_base}.small")
+elseif (KITSUNE_TEST_INPUT_SIZE STREQUAL "medium")
+  kitsune_singlesource(
+    CMDARGS ${check} 6400 6400
+    REFOUT "${check_file_base}.medium")
+else()
+  kitsune_singlesource()
+endif()
+```
+
+In order to add a new benchmark, create a subdirectory within `Benchmarks/`
+and add all the equivalent files to it while making sure that they have the
+correct extensions. It is not strictly necessary to have
+multiple implementations --- that is mostly useful for performance
+comparisons. However, if the test is entirely self-contained, i.e. it does not
+require external resources such as files to check its output, and multiple
+implementations are not desired, it may be more appropriate to add it to the
+[`SingleSource/`](#SingleSource) directory instead.
+
+[^1]: Yes, this is rather terrible, but this is not really intended to be a
+    showcase of good software engineering practices. Besides, the tests here
+    are also intended to be convenient for developers to use during
+    experimentation (not just as part of a regression-testing process) and
+    having to compile multiple files by hand is not as convenient.
+
+### SingleSource/ ###
+
+The `SingleSource/` directory contains single-source tests that are only
+intended for correctness checks. All files in the directory are expected to
+contain Kitsune-specific extensions/annotations, and, therefore, must be
+named `.kit.*`.
+
+Each file must check its own results and return 0 on success and non-zero on
+failure. The files are not allowed to accept any command-line arguments and
+must be able to check their results without any external resources (e.g. files).
+There are currently no plans to remove this limitation, but it may be possible
+to do so.
+
+To add a test, simply add a file to this directory with the correct extension
+and reconfigure[^2] the test suite. The newly added file should be picked up
+automatically.
+
+[^2]: It may be necessary to delete the build directory and reconfigure if
+cmake does not automatically pick up any newly added files/directories.
