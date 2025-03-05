@@ -3,14 +3,14 @@ include(KitsuneTestSuite)
 file(COPY lit.local.cfg DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 if (KITSUNE_TEST_INPUT_SIZE STREQUAL "small")
-  # samples    16
-  # width      320
-  # height     200
+  # samples    8
+  # width      160
+  # height     100
   set(base "raytracer.small")
   set(refc "${base}.cpu.dat")
   set(refg "${base}.gpu.dat")
   kitsune_singlesource(
-    CMDARGS -j 16 320 200
+    CMDARGS -j 8 160 100
     DATA ${refc} ${refg})
 elseif (KITSUNE_TEST_INPUT_SIZE STREQUAL "medium")
   # samples    128
@@ -20,7 +20,7 @@ elseif (KITSUNE_TEST_INPUT_SIZE STREQUAL "medium")
   set(refc "${base}.cpu.dat")
   set(refg "${base}.gpu.dat")
   kitsune_singlesource(
-    CMDARGS -j 16 320 200
+    CMDARGS -j 128 1280 1024
     DATA ${refc} ${refg})
 else()
   kitsune_singlesource()

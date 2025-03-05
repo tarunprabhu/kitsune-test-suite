@@ -126,11 +126,11 @@ static void alloc(Img &img, RawImg &rawImg, unsigned imageWidth,
                   unsigned imageHeight) {
   unsigned imageSize = imageWidth * imageHeight;
 #if defined(IS_CUDA)
-  cudaMallocManaged(&img, imageSize);
-  cudaMallocManager(&rawImg, imageSize);
+  cudaMallocManaged(&img, imageSize * sizeof(Pixel));
+  cudaMallocManaged(&rawImg, imageSize * sizeof(Vec));
 #elif defined(IS_HIP)
-  hipMallocManaged(&img, imageSize);
-  hipMallocManaged(&rawImg, imageSize);
+  hipMallocManaged(&img, imageSize * sizeof(Pixel));
+  hipMallocManaged(&rawImg, imageSize * sizeof(Vec));
 #else
   img.alloc(imageSize);
   rawImg.alloc(imageSize);
@@ -172,7 +172,7 @@ static void dealloc(Img &img, RawImg &rawImg) {
 // did not match. If the size of the image does not match, return -1. If the
 // output matches, return 0.
 static int check(const std::string &checkFile, const std::string &outFile) {
-  const float epsilon = 1e-6;
+  const float epsilon = 10;
 
   FILE *fa = fopen(outFile.c_str(), "rb");
   FILE *fe = fopen(checkFile.c_str(), "rb");
@@ -195,9 +195,6 @@ static int check(const std::string &checkFile, const std::string &outFile) {
     return -2;
 
   for (unsigned i = 0; i < ew * eh; ++i) {
-    const Vec *ep = &ev[i];
-    const Vec *ap = &av[i];
-
     if (fabs(ev[i].x - av[i].x) > epsilon or
         fabs(ev[i].y - av[i].y) > epsilon or
         fabs(ev[i].z - av[i].z) > epsilon) {

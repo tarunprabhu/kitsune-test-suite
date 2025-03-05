@@ -15,9 +15,9 @@ using namespace kitsune;
 
 #include "euler3d.inc"
 
-static void cpy(mobile_ptr<float> dst, const mobile_ptr<float> src, int N) {
+static void cpy(mobile_ptr<float> dst, const mobile_ptr<float> src, int n) {
   // clang-format off
-  forall(unsigned int i = 0; i < N; i++) {
+  forall(int i = 0; i < n; i++) {
     dst[i] = src[i];
   }
   // clang-format on
@@ -120,7 +120,7 @@ static void compute_flux(int nelr,
                          const Float3 ff_flux_contribution_density_energy) {
   const float smoothing_coefficient = 0.2f;
 
-  forall(unsigned int blk = 0; blk < nelr / block_length; ++blk) {
+  forall(unsigned blk = 0; blk < nelr / block_length; ++blk) {
     unsigned int b_start = blk * block_length;
     unsigned int b_end =
         (blk + 1) * block_length > nelr ? nelr : (blk + 1) * block_length;

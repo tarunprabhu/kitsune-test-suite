@@ -198,9 +198,9 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
             const std::string &domainFile) {
 // these need to be computed the first time in order to compute time step
 #if defined(IS_CUDA)
-  cudaMalloc(&ff_variable, NVAR * sizeof(float));
+  cudaMallocManaged(&ff_variable, NVAR * sizeof(float));
 #elif defined(IS_HIP)
-  hipMalloc(&ff_variable, NVAR * sizeof(float));
+  hipMallocManaged(&ff_variable, NVAR * sizeof(float));
 #else
   ff_variable.alloc(NVAR);
 #endif
@@ -246,21 +246,21 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
       block_length * ((nel / block_length) + std::min(1, nel % block_length));
 
 #if defined(IS_CUDA)
-  cudaMalloc(&areas, nelr * sizeof(float));
-  cudaMalloc(&elements_surrounding_elements, nelr * NNB * sizeof(int));
-  cudaMalloc(&normals, nelr * NDIM * NNB * sizeof(float));
-  cudaMalloc(&variables, nelr * NVAR * sizeof(float));
-  cudaMalloc(&old_variables, nelr * NVAR * sizeof(float));
-  cudaMalloc(&fluxes, nelr * NVAR * sizeof(float));
-  cudaMalloc(&step_factors, nelr * sizeof(float));
+  cudaMallocManaged(&areas, nelr * sizeof(float));
+  cudaMallocManaged(&elements_surrounding_elements, nelr * NNB * sizeof(int));
+  cudaMallocManaged(&normals, nelr * NDIM * NNB * sizeof(float));
+  cudaMallocManaged(&variables, nelr * NVAR * sizeof(float));
+  cudaMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
+  cudaMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
+  cudaMallocManaged(&step_factors, nelr * sizeof(float));
 #elif defined(IS_HIP)
-  hipMalloc(&areas, nelr * sizeof(float));
-  hipMalloc(&elements_surrounding_elements, nelr * NNB * sizeof(int));
-  hipMalloc(&normals, nelr * NDIM * NNB * sizeof(float));
-  hipMalloc(&variables, nelr * NVAR * sizeof(float));
-  hipMalloc(&old_variables, nelr * NVAR * sizeof(float));
-  hipMalloc(&fluxes, nelr * NVAR * sizeof(float));
-  hipMalloc(&step_factors, nelr * sizeof(float));
+  hipMallocManaged(&areas, nelr * sizeof(float));
+  hipMallocManaged(&elements_surrounding_elements, nelr * NNB * sizeof(int));
+  hipMallocManaged(&normals, nelr * NDIM * NNB * sizeof(float));
+  hipMallocManaged(&variables, nelr * NVAR * sizeof(float));
+  hipMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
+  hipMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
+  hipMallocManaged(&step_factors, nelr * sizeof(float));
 #else
   areas.alloc(nelr);
   elements_surrounding_elements.alloc(nelr * NNB);
@@ -356,7 +356,8 @@ static bool check(const std::string &out_file, const std::string &check_file) {
   return true;
 }
 
-static void save(const std::string &out_file, mobile_ptr<float> variables,
+template <typename FArr>
+static void save(const std::string &out_file, FArr& variables,
                  int nel, int nelr) {
   FILE *fp = fopen(out_file.c_str(), "wb");
   char type;

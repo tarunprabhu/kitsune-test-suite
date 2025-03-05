@@ -2,10 +2,13 @@
 
 #include <cmath>
 #include <cuda_runtime.h>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 
 #include "timing.h"
+
+namespace fs = std::filesystem;
 
 struct Vec {
   float x, y, z;
@@ -29,6 +32,7 @@ struct Vec {
   }
 };
 
+#define IS_CUDA
 #include "raytracer.inc"
 
 __forceinline__ __device__ float randomVal(unsigned int &x) {
@@ -194,7 +198,7 @@ __global__ void Pathtracer(int sampleCount, Pixel *img, Vec *rawImg,
     color = color * (1.0f / sampleCount) + 14.0f / 241.0f;
 
     // Save the pre-quantized image.
-    rawImg[i] = color;
+    rawImg[index] = color;
 
     Vec o = color + 1.0f;
     color = Vec(color.x / o.x, color.y / o.y, color.z / o.z) * 255.0f;
@@ -215,7 +219,7 @@ int main(int argc, char **argv) {
   std::string gpuRefFile;
   Pixel *img = nullptr;
   Vec *rawImg = nullptr;
-  int threadsPerBlock;
+  unsigned threadsPerBlock;
 
   parseCommandLineInto(argc, argv, sampleCount, imageWidth, imageHeight,
                        imgFile, outFile, cpuRefFile, gpuRefFile,
@@ -224,11 +228,12 @@ int main(int argc, char **argv) {
   TimerGroup tg("raytracer");
   Timer &main = tg.add("main", "Total");
 
-  header("forall", img, rawImg, sampleCount, imageWidth, imageHeight);
+  header("cuda", img, rawImg, sampleCount, imageWidth, imageHeight);
 
   main.start();
   unsigned totalPixels = imageWidth * imageHeight;
-  int blocksPerGrid = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
+  unsigned blocksPerGrid =
+      (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
   Pathtracer<<<blocksPerGrid, threadsPerBlock>>>(sampleCount, img, rawImg,
                                                  imageWidth, imageHeight);
   cudaDeviceSynchronize();
@@ -240,7 +245,7 @@ int main(int argc, char **argv) {
 }
 
 // int main(int argc, char **argv) {
-//   if (argc != 5) {
+//   if (argc != 4) {
 //     std::cerr << "USAGE: raytracer <samples> <width> <height> <check-file>"
 //               << std::endl;
 //     return 1;
@@ -250,7 +255,7 @@ int main(int argc, char **argv) {
 //   unsigned int sampleCount = std::stoi(argv[1]);
 //   unsigned int imageWidth = std::stoi(argv[2]);
 //   unsigned int imageHeight = std::stoi(argv[3]);
-//   std::string checkFile = argv[4];
+//   // std::string checkFile = argv[4];
 //   std::string outFile = fs::path(argv[0]).filename().string() + ".ppm";
 
 //   std::cout << "\n";
@@ -275,10 +280,9 @@ int main(int argc, char **argv) {
 
 //   std::cout << "  Starting benchmark..." << std::flush;
 //   main.start();
-//   int threadsPerBlock = 32;
+//   int threadsPerBlock = 256;
 //   int blocksPerGrid = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
-//   Pathtracer<<<blocksPerGrid, threadsPerBlock>>>(sampleCount, img,
-//   totalPixels,
+//   Pathtracer<<<blocksPerGrid, threadsPerBlock>>>(sampleCount, img, nullptr,
 //                                                  imageWidth, imageHeight);
 //   cudaDeviceSynchronize();
 //   uint64_t us = main.stop();
@@ -296,15 +300,15 @@ int main(int argc, char **argv) {
 //   }
 //   std::cout << "done\n\n";
 
-//   std::cout << "\n  Checking final result..." << std::flush;
-//   size_t mismatch = check(outFile, checkFile);
-//   if (mismatch)
-//     std::cout << "  FAIL! (Mismatch at byte " << mismatch << ")\n\n";
-//   else
-//     std::cout << "  pass\n\n";
+//   // std::cout << "\n  Checking final result..." << std::flush;
+//   // size_t mismatch = check(outFile, checkFile);
+//   // if (mismatch)
+//   //   std::cout << "  FAIL! (Mismatch at byte " << mismatch << ")\n\n";
+//   // else
+//   //   std::cout << "  pass\n\n";
 
-//   json(std::cout, {main});
+//   // json(std::cout, {main});
 
 //   cudaFree(img);
-//   return mismatch;
+//   // return mismatch;
 // }

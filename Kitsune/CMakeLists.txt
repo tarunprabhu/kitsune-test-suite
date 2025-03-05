@@ -41,6 +41,9 @@ set(KITSUNE_HIP_ARCH "" CACHE STRING
 architecture if Kitsune's default is not suitable. This simply adds the \
 --tapir-hip-arch= option when building with the 'hip' tapir target")
 
+set(KITSUNE_FLAGS_EXTRA "" CACHE STRING
+  "Additional options to pass to all Kitsune frontends")
+
 set(KITSUNE_C_FLAGS_EXTRA "" CACHE STRING
   "Additional options to pass to Kitsune's C frontend")
 
@@ -149,6 +152,7 @@ else ()
   set(TEST_C ON)
   set(KITSUNE_C_FLAGS "${CMAKE_C_FLAGS} \
 ${CMAKE_C_FLAGS_${BUILD_CONFIG}} \
+${KITSUNE_FLAGS_EXTRA} \
 ${KITSUNE_C_FLAGS_EXTRA}")
   message(STATUS "C compiler options: ${KITSUNE_C_FLAGS}")
 endif ()
@@ -182,6 +186,7 @@ else ()
   set(TEST_CXX ON)
   set(KITSUNE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
 ${CMAKE_CXX_FLAGS_${BUILD_CONFIG}} \
+${KITSUNE_FLAGS_EXTRA} \
 ${KITSUNE_CXX_FLAGS_EXTRA}")
   message(STATUS "C++ compiler options: ${KITSUNE_CXX_FLAGS}")
 endif ()
@@ -218,6 +223,7 @@ else ()
   enable_language(Fortran)
   set(KITSUNE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} \
 ${CMAKE_Fortran_FLAGS_${BUILD_CONFIG}} \
+${KITSUNE_FLAGS_EXTRA} \
 ${KITSUNE_Fortran_FLAGS_EXTRA}")
   message(STATUS "Fortran compiler options: ${KITSUNE_Fortran_FLAGS}")
 endif ()

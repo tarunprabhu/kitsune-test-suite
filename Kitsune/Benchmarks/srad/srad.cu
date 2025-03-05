@@ -2,7 +2,8 @@
 #include <filesystem>
 #include <iostream>
 #include <stdlib.h>
-#include <timing.h>
+
+#include "timing.h"
 
 namespace fs = std::filesystem;
 
@@ -35,7 +36,6 @@ __global__ void doLoop1(int rows, int cols, float *J, int *iN, int *iS, int *jE,
                         int *jW, float *dN, float *dS, float *dE, float *dW,
                         float q0sqr, float *c) {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
-  printf("i: %d\n", i);
   if (i < rows)
     for (int j = 0; j < cols; j++) {
       int k = i * cols + j;

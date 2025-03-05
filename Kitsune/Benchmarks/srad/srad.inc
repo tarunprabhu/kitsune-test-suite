@@ -273,29 +273,29 @@ template <typename FArr, typename IArr>
 static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                     IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE) {
 #if defined(IS_CUDA)
-  cudaFree(&I);
-  cudaFree(&J);
-  cudaFree(&c);
-  cudaFree(&iN);
-  cudaFree(&iS);
-  cudaFree(&jW);
-  cudaFree(&jE);
-  cudaFree(&dN);
-  cudaFree(&dS);
-  cudaFree(&dW);
-  cudaFree(&dE);
+  cudaFree(I);
+  cudaFree(J);
+  cudaFree(c);
+  cudaFree(iN);
+  cudaFree(iS);
+  cudaFree(jW);
+  cudaFree(jE);
+  cudaFree(dN);
+  cudaFree(dS);
+  cudaFree(dW);
+  cudaFree(dE);
 #elif defined(IS_HIP)
-  hipFree(&I);
-  hipFree(&J);
-  hipFree(&c);
-  hipFree(&iN);
-  hipFree(&iS);
-  hipFree(&jW);
-  hipFree(&jE);
-  hipFree(&dN);
-  hipFree(&dS);
-  hipFree(&dW);
-  hipFree(&dE);
+  hipFree(I);
+  hipFree(J);
+  hipFree(c);
+  hipFree(iN);
+  hipFree(iS);
+  hipFree(jW);
+  hipFree(jE);
+  hipFree(dN);
+  hipFree(dS);
+  hipFree(dW);
+  hipFree(dE);
 #else
   I.free();
   J.free();

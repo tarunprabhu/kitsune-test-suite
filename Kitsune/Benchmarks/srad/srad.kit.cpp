@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
 
   // clang-format off
   forall(int k = 0; k < size_I; k++) {
-    J[k] = (float)exp(I[k]);
+    J[k] = expf(I[k]);
   }
   // clang-format on
   init.stop();
