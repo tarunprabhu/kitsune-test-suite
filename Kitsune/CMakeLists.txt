@@ -31,11 +31,24 @@ set(KITSUNE_TEST_INPUT_SIZE "small" CACHE STRING
   "The size of the input in the tests that support it. Must be one of \
 \"small\", or \"medium\". Defaults to \"small\"")
 
-set(KITSUNE_NVARCH "" CACHE STRING
-  "Currently, Kitsune cannot automatically determine the sm version of an
-NVIDIA GPU. This must be set manually if Kitsune's default sm version does not
-match that of the available GPU. This simply adds the -ftapir-nvarch= option
-when building with the cuda tapir target")
+set(KITSUNE_CUDA_ARCH "" CACHE STRING
+  "Kitsune can only compile for a single GPU, and must be given the GPU \
+architecture if Kitsune's default is not suitable. This simply adds the \
+--tapir-cuda-arch= option when building with the 'cuda' tapir target")
+
+set(KITSUNE_HIP_ARCH "" CACHE STRING
+  "Kitsune can only compile for a single GPU, and must be given the GPU \
+architecture if Kitsune's default is not suitable. This simply adds the \
+--tapir-hip-arch= option when building with the 'hip' tapir target")
+
+set(KITSUNE_C_FLAGS_EXTRA "" CACHE STRING
+  "Additional options to pass to Kitsune's C frontend")
+
+set(KITSUNE_CXX_FLAGS_EXTRA "" CACHE STRING
+  "Additional options to pass to Kitsune's C++ frontend")
+
+set(KITSUNE_Fortran_FLAGS_EXTRA "" CACHE STRING
+  "Additional options to pass to Kitsune's Fortran frontend")
 
 option(KITSUNE_TEST_KOKKOS_MODE
   "Check Kitsune's -fkokkos-mode if it has been enabled"
@@ -77,6 +90,30 @@ set(TEST_QTHREADS_TARGET OFF)
 set(TEST_REALM_TARGET OFF)
 set(TEST_SERIAL_TARGET OFF)
 
+# The compiler options to use with the various frontends. These will be a
+# combination of any default options required by Kitsune, those required to
+# build the tests for the given configuration (Debug, Release etc.) and any
+# extra options specified by the user.
+set(KITSUNE_C_FLAGS "")
+set(KITSUNE_CXX_FLAGS "")
+set(KITSUNE_Fortran_FLAGS "")
+
+# There are several known issues with Kitsune:
+#
+#   - Some tapir targets require optimizations to be enabled in order to work
+#     correctly.
+#
+#   - Some tapir targets do not support debug symbols.
+#
+# These will eventually get fixed, but for now, we need to work around them.
+# We do this by requiring that this test suite be built in Release mode. In
+# principle, we should also check that the CMAKE_${LANG}_FLAGS do not contain
+# -g and do contain -On (n > 0), but we take the quick route for now.
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+  message(FATAL_ERROR "Kitsune test suite must be built with CMAKE_BUILD_TYPE=Release")
+endif ()
+string(TOUPPER "${CMAKE_BUILD_TYPE}" BUILD_CONFIG)
+
 # Grep is needed to check if a test passed or failed.
 find_program(GREP grep REQUIRED)
 
@@ -110,6 +147,10 @@ elseif (KITSUNE_C IN_LIST KITSUNE_SKIP_FRONTENDS)
   set(TEST_C OFF)
 else ()
   set(TEST_C ON)
+  set(KITSUNE_C_FLAGS "${CMAKE_C_FLAGS} \
+${CMAKE_C_FLAGS_${BUILD_CONFIG}} \
+${KITSUNE_C_FLAGS_EXTRA}")
+  message(STATUS "C compiler options: ${KITSUNE_C_FLAGS}")
 endif ()
 if (TEST_C)
   # Find clang because we may need to compile vanilla C code in the test suite.
@@ -139,6 +180,10 @@ elseif (KITSUNE_CXX IN_LIST KITSUNE_SKIP_FRONTENDS)
   set(TEST_CXX OFF)
 else ()
   set(TEST_CXX ON)
+  set(KITSUNE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
+${CMAKE_CXX_FLAGS_${BUILD_CONFIG}} \
+${KITSUNE_CXX_FLAGS_EXTRA}")
+  message(STATUS "C++ compiler options: ${KITSUNE_CXX_FLAGS}")
 endif ()
 if (TEST_CXX)
   # Find clang++ because we may need to compile vanilla C++ code in the test
@@ -168,15 +213,18 @@ elseif (KITSUNE_Fortran IN_LIST KITSUNE_SKIP_FRONTENDS)
   set(TEST_Fortran OFF)
 else ()
   set(TEST_Fortran ON)
-endif ()
-if (TEST_Fortran)
   # The Fortran language may not have been enabled if TEST_SUITE_FORTRAN was not
   # set.
   enable_language(Fortran)
-
+  set(KITSUNE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} \
+${CMAKE_Fortran_FLAGS_${BUILD_CONFIG}} \
+${KITSUNE_Fortran_FLAGS_EXTRA}")
+  message(STATUS "Fortran compiler options: ${KITSUNE_Fortran_FLAGS}")
+endif ()
+if (TEST_Fortran)
   # Find flang because we may need to compile vanilla Fortran code in the test
   # suite. This should be the one on which Kitsune is based.
-  find_program(FLANG flang REQUIRED
+  find_program(FLANG flang flang-new REQUIRED
     PATHS ${COMPILER_BINDIR}
     NO_DEFAULT_PATH)
 
@@ -275,8 +323,7 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
 
     if (NOT NVIDIA_SMI_RESULT STREQUAL "0")
       set(TEST_CUDA_TARGET OFF)
-      message(STATUS "No NVIDIA GPU's found")
-      message(STATUS "Skipping tapir target: cuda")
+      message(WARNING "No NVIDIA GPU's found! Skipping tapir target: cuda")
     else ()
       set(TEST_CUDA_TARGET ON)
       message(STATUS "Testing tapir target: cuda")
@@ -292,7 +339,7 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
 
     find_program(ROCM_SMI rocm-smi REQUIRED)
 
-    execute_process(COMMAND "${ROCM_SMI}"
+    execute_process(COMMAND "${ROCM_SMI}" -i
       RESULT_VARIABLE ROCM_SMI_RESULT
       OUTPUT_VARIABLE ROCM_SMI_OUT
       ERROR_VARIABLE ROCM_SMI_ERR)
@@ -301,7 +348,7 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
     # Yes, yes, one can make an argument for why the absence of a GPU is
     # "normal", but it is not unreasonable to expect "found GPU" to be success
     # and "GPU not found" to be a failure in a tool like this. Plus, there is
-    # guarantee that this string will not change. (*#&$(@*@!))
+    # guarantee that this string will not change. *#&$(@*@!
     string(FIND "${ROCM_SMI_OUT}" "Driver not initialized" ERR_OUT)
     string(FIND "${ROCM_SMI_ERR}" "Driver not initialized" ERR_ERR)
 
@@ -309,8 +356,7 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
         OR NOT ERR_OUT STREQUAL -1
         OR NOT ERR_ERR STREQUAL -1)
       set(TEST_HIP_TARGET OFF)
-      message(STATUS "No AMD GPU's found")
-      message(STATUS "Skipping tapir target: hip")
+      message(WARNING "No AMD GPU's found! Skipping tapir target: hip")
     else ()
       set(TEST_HIP_TARGET ON)
       message(STATUS "Testing tapir target: hip")
@@ -334,8 +380,19 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
     set(TEST_REALM_TARGET ON)
     message(STATUS "Testing tapir target: ${tapir_target}")
   elseif (tapir_target STREQUAL "serial")
-    set(TEST_SERIAL_TARGET ON)
-    message(STATUS "Testing tapir target: ${tapir_target}")
+    # The serial tapir target can be very, very slow. There is also absolutely
+    # no reason to run it with anything larger than the smallest input sizes.
+    # Since the larger input sizes are only intended to be used for performance
+    # comparisons, just disable the serial tapir target in that case. The more
+    # common use for this is for correctness checks and the small problem sizes
+    # are sufficient for that.
+    if (NOT KITSUNE_TEST_INPUT_SIZE STREQUAL "small")
+      message(WARNING "Disabling tapir target 'serial' \
+(test input size is '${KITSUNE_TEST_INPUT_SIZE}')")
+    else ()
+      set(TEST_SERIAL_TARGET ON)
+      message(STATUS "Testing tapir target: ${tapir_target}")
+    endif ()
   else ()
     message(FATAL_ERROR "Unknown tapir target: ${tapir_target}")
   endif ()

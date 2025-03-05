@@ -7,6 +7,16 @@
 
 using namespace kitsune;
 
+static void initialize(mobile_ptr<double> a, mobile_ptr<double> b, size_t m,
+                       size_t n, size_t k) {
+  srand(7);
+  for (size_t i = 0; i < m * k; ++i)
+    a[i] = rand() / double(RAND_MAX) * rand();
+
+  for (size_t i = 0; i < n * k; ++i)
+    b[i] = rand() / double(RAND_MAX) * rand();
+}
+
 static void matrix_multiplication(mobile_ptr<double> a, mobile_ptr<double> b,
                                   mobile_ptr<double> c, size_t m, size_t n,
                                   size_t k) {
@@ -43,7 +53,7 @@ int main(int argc, char *argv[]) {
   size_t m = 128, n = 128, k = 32;
 
   if (argc > 4) {
-    std::cerr << "Usage: " << argv[0] << " M N K [iteration]\n\n";
+    std::cerr << "Usage: " << argv[0] << " [M] [N] [K]\n\n";
     return 1;
   }
   if (argc > 3)
@@ -57,6 +67,7 @@ int main(int argc, char *argv[]) {
   mobile_ptr<double> b(n * k);
   mobile_ptr<double> c(m * n);
 
+  initialize(a, b, m, n, k);
   matrix_multiplication(a, b, c, m, n, k);
 
   std::cout << "\n  Checking final result..." << std::flush;

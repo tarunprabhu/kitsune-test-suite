@@ -86,15 +86,21 @@ function (register_test target tapir_target cmdargs data)
   endif ()
 
   # We need this only because Kitsune cannot currently automatically detect the
-  # sm version of the GPU for which we are compiling. When we can do this
+  # architecture of the GPU for which we are compiling. When we can do this
   # automatically, or if we resort to creating a multi-target fat binary with
-  # a range of sm versions supported, this can (and should) go away
-  if (tapir_target STREQUAL "cuda" AND NOT KITSUNE_NVARCH STREQUAL "")
-    # FIXME: Current, -ftapir-nvarch does not seem to be correctly wired up
-    # inside Kitsune, so we need to use -mllvm cuabi-arch to get the right value
-    # all the way through. We should fix -ftapir-nvarch eventually, but till
-    # then, do it this way.
-    target_compile_options(${target} PUBLIC -mllvm -cuabi-arch=${KITSUNE_NVARCH})
+  # a range of architectures supported, this should go away.
+  if (tapir_target STREQUAL "cuda" AND NOT KITSUNE_CUDA_ARCH STREQUAL "")
+    # FIXME: Currently, --tapir-cuda-arch is not wired up, so we must use
+    # -mllvm cuabi-arch to set the correct value in the 'cuda' tapir target.
+    target_compile_options(${target} PUBLIC
+      -mllvm -cuabi-arch=${KITSUNE_CUDA_ARCH})
+  endif ()
+
+  if (tapir_target STREQUAL "hip" AND NOT KITSUNE_HIP_ARCH STREQUAL "")
+    # FIXME: Currently, --tapir-hip-arch is not wired up, so we must use
+    # -mllvm hipabi-arch to set the correct value in the 'hip' tapir target.
+    target_compile_options(${target} PUBLIC
+      -mllvm -hipabi-arch=${KITSUNE_HIP_ARCH})
   endif ()
 endfunction ()
 
