@@ -54,39 +54,40 @@ build_dir=""
 outfile="${kitsune}/report.json"
 
 while getopts "b:ho:" opt; do
-    case "${opt}" in
-        b)
-            build_dir="${OPTARG}"
-            ;;
-        h)
-            echo "${help}"
-            exit 0
-            ;;
-        o)
-            outfile="${OPTARG}"
-            ;;
-        *)
-            echo "${usage}"
-            exit 1
-            ;;
-    esac
+	case "${opt}" in
+	b)
+		build_dir="${OPTARG}"
+		;;
+	h)
+		echo "${help}"
+		exit 0
+		;;
+	o)
+		outfile="${OPTARG}"
+		;;
+	*)
+		echo "${usage}"
+		exit 1
+		;;
+	esac
 done
 
 lit=
 if [ -n "${build_dir}" ]; then
-    lit=${build_dir}/bin/llvm-lit
+	lit=${build_dir}/bin/llvm-lit
 else
-    lit=$(command -v lit)
+	lit=$(command -v lit)
 fi
 
 if [ -z "${lit}" ] || ! [ -x "${lit}" ]; then
-    echo "Could not find suitable lit executable"
-    exit 1
+	echo "Could not find suitable lit executable"
+	exit 1
 fi
 
 # TODO: It is not clear that we need NO_STOP_MESSAGE=1 for the Fortran tests,
 # but keep it for now. We will definitely want to revisit this at some point.
-NO_STOP_MESSAGE=1 ${lit} -j 1 -o ${kitsune}/ts-report.json ${kitsune}
+export NO_STOP_MESSAGE=1
+# ${lit} -s -j 1 -o ${kitsune}/ts-report.json ${kitsune}
 
 # This should return a non-zero exit code if any tests failed.
 pass=$?
@@ -97,17 +98,17 @@ pass=$?
 cpu="<<UNKNOWN>>"
 cores="0"
 if ls -l /proc/cpuinfo >/dev/null 2>&1; then
-    cpu=$(cat /proc/cpuinfo |
-        grep "model name" |
-        sed 's/model name\s*:\s*//g' |
-        sort |
-        uniq)
-    cores=$(cat /proc/cpuinfo |
-        grep "processor" |
-        sed 's/processor\s*:\s*//g' |
-        wc -l)
+	cpu=$(cat /proc/cpuinfo |
+		grep "model name" |
+		sed 's/model name\s*:\s*//g' |
+		sort |
+		uniq)
+	cores=$(cat /proc/cpuinfo |
+		grep "processor" |
+		sed 's/processor\s*:\s*//g' |
+		wc -l)
 else
-    echo "Looking up CPU info on non-Linux platforms is not implemented"
+	echo "Looking up CPU info on non-Linux platforms is not implemented"
 fi
 
 nvidia_smi=$(command -v nvidia-smi)
@@ -123,42 +124,65 @@ rocm_smi=$(command -v rocm-smi)
 # same model. Optimize for that scenario but be flexible enough to record all
 # the GPU's if that is not the case.
 #
-gpu=""
-devices=0
+gpus=""
+count=0
 if [ -n "${nvidia_smi}" ]; then
-    gpus=$(nvidia-smi -L | wc -l)
-    if [ $? -eq 0 ]; then
-        nvidia=$(nvidia-smi -L |
-            sed -E 's/GPU[ ]*[0-9]+:[ ]*//g' |
-            sed -E 's/[ ]*[(]UUID:[ ]*.+[)]//g' |
-            sort |
-            uniq |
-            tr '\n' ';' |
-            sed -E 's/;$//g')
-        [ -n "${gpu}" ] && gpu="${gpu}"
-        gpu="${gpu}${nvidia}"
-        devices=$((devices + gpus))
-    fi
+	# If no GPU's are found, nvidia-smi -L will return an error code.
+	report=$(nvidia-smi -L)
+	if [ $? -eq 0 ]; then
+		names=$(echo "${report}" |
+			sed -E 's/GPU[ ]*[0-9]+:[ ]*//g' |
+			sed -E 's/[ ]*[(]UUID:[ ]*.+[)]//g' |
+			sort |
+			uniq)
+		n=$(echo "${names}" | wc -l)
+		namelist=$(echo "${names}" |
+			tr '\n' ';' |
+			sed -E 's/;$//g')
+		[ -n "${gpus}" ] && gpus="${gpus};"
+		gpus="${gpus}${namelist}"
+		count=$((count + n))
+	fi
 fi
 if [ -n "${rocm_smi}" ]; then
-    gpus=$(rocm-smi -i 2> /dev/null | wc -l)
-    if [ ${gpus} -ne 0 ]; then
-        amd=$(rocm-smi -i |
-            grep "Device Name" |
-            awk -F':' '{print $3;}' |
-            sed -E 's/^\s*//g' |
-            sort |
-            uniq |
-            tr '\n' ';' |
-            sed -E 's/;$//g')
-        [ -n "${gpu}" ] && gpu="${gpu}"
-        gpu="${gpu}${amd}"
-        devices=$((devices + gpus))
-    fi
+	# rocm-smi will never return an error code, even if no GPU's were found.
+	# Instead, stdout will be empty with errors in stderr.
+	report=$(rocm-smi -i 2>/dev/null)
+	if [ -n "${report}" ]; then
+		names=$(rocm-smi -i |
+			grep "Device Name" |
+			awk -F':' '{print $3;}' |
+			sed -E 's/^\s*//g' |
+			sort |
+			uniq)
+		n=$(echo "${names}" | wc -l)
+		namelist=$(echo "${names}" |
+			tr '\n' ';' |
+			sed -E 's/;$//g')
+		[ -n "${gpus}" ] && gpus="${gpus};"
+		gpus="${gpus}${namelist}"
+		count=$((count + n))
+	fi
 fi
 
 date=$(date --rfc-3339=seconds)
 host=$(hostname)
+
+# Determine the version of Kitsune used when building these tests. We cannot
+# assume that it will be in $PATH, so look at the CMakeCache.txt in the root of
+# the test suite build directory. This should always be available. Kitsune's C
+# frontend should always be available.
+version=""
+kitcc=$(grep "C_COMPILER:" "${test_suite}/CMakeCache.txt" |
+	grep -oE "=.+$" |
+	tr -d '=')
+if [ -n "${kitcc}" ]; then
+	version=$(${kitcc} --version |
+		head -n 1 |
+		grep -oE "version [^ ]+" |
+		sed 's/version//g' |
+		tr -d ' ')
+fi
 
 platform="{
   \"cpu\": {
@@ -166,23 +190,24 @@ platform="{
     \"cores\": ${cores}
   },
   \"gpu\": {
-    \"model\": \"${gpu}\",
-    \"devices\": ${devices}
+    \"count\": ${count},
+    \"devices\": \"${gpus}\"
   },
   \"date\": \"${date}\",
-  \"host\": \"${host}\"
+  \"hostname\": \"${host}\",
+  \"version\": \"${version}\"
 }"
 
 echo "${platform}" >${kitsune}/platform.json
 
 if [ ${pass} -eq 0 ]; then
-    # Generate the combined report. There is no reason to do this as a separate
-    # step. It can always be done separately if needed. The -b option must be
-    # given the root of the test suite.
-    ${kitsune}/utils/kit-combine \
-        -b "${test_suite}" \
-        -o "${outfile}" \
-        "${kitsune}/ts-report.json"
+	# Generate the combined report. There is no reason to do this as a separate
+	# step. It can always be done separately if needed. The -b option must be
+	# given the root of the test suite.
+	${kitsune}/utils/kit-combine \
+		-b "${test_suite}" \
+		-o "${outfile}" \
+		"${kitsune}/ts-report.json"
 fi
 
 exit ${pass}

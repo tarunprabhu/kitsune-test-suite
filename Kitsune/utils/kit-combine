@@ -127,7 +127,8 @@ def parse_output_into(build_dir: str, base: str, data) -> None:
                 record = False
             elif record:
                 lines.append(line.strip())
-    data['times'] = json.loads('\n'.join(lines))
+    if lines:
+        data['times'] = json.loads('\n'.join(lines))
 
 # Process the report file and generate the combined report.
 def process(report_file: str, build_dir: str):

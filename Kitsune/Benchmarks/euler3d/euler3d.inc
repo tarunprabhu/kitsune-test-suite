@@ -132,6 +132,41 @@ static void parseCommandLineInto(int argc, char *argv[],
 }
 
 template <typename FArr, typename IArr>
+static void dealloc(FArr &ff_variable, FArr &areas,
+                    IArr &elements_surrounding_elements, FArr &normals,
+                    FArr &variables, FArr &old_variables, FArr &fluxes,
+                    FArr &step_factors) {
+#if defined(IS_CUDA)
+  cudaFree(ff_variable);
+  cudaFree(areas);
+  cudaFree(elements_surrounding_elements);
+  cudaFree(normals);
+  cudaFree(variables);
+  cudaFree(old_variables);
+  cudaFree(fluxes);
+  cudaFree(step_factors);
+#elif defined(IS_HIP)
+  hipFree(ff_variable);
+  hipFree(areas);
+  hipFree(elements_surrounding_elements);
+  hipFree(normals);
+  hipFree(variables);
+  hipFree(old_variables);
+  hipFree(fluxes);
+  hipFree(step_factors);
+#else
+  ff_variable.free();
+  areas.free();
+  elements_surrounding_elements.free();
+  normals.free();
+  variables.free();
+  old_variables.free();
+  fluxes.free();
+  step_factors.free();
+#endif
+}
+
+template <typename FArr, typename IArr>
 static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                   IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE, int rows,
                   int cols) {
@@ -306,8 +341,11 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
   std::cout << "  Starting benchmark ... " << std::flush;
 }
 
+// FIXME: We may be able to lower the tolerance once Kitsune correctly handles
+// the fp-contract option.
+static constexpr float epsilon = 1e-5;
+
 static bool check(const std::string &out_file, const std::string &check_file) {
-  float epsilon = 1e-6;
   char ec, ac;
 
   FILE *fa = fopen(out_file.c_str(), "rb");
@@ -357,8 +395,8 @@ static bool check(const std::string &out_file, const std::string &check_file) {
 }
 
 template <typename FArr>
-static void save(const std::string &out_file, FArr& variables,
-                 int nel, int nelr) {
+static void save(const std::string &out_file, FArr &variables, int nel,
+                 int nelr) {
   FILE *fp = fopen(out_file.c_str(), "wb");
   char type;
 
@@ -370,41 +408,6 @@ static void save(const std::string &out_file, FArr& variables,
   fwrite(&variables[VAR_DENSITY_ENERGY * nelr], sizeof(float), nel, fp);
 
   fclose(fp);
-}
-
-template <typename FArr, typename IArr>
-static void dealloc(FArr &ff_variable, FArr &areas,
-                    IArr &elements_surrounding_elements, FArr &normals,
-                    FArr &variables, FArr &old_variables, FArr &fluxes,
-                    FArr &step_factors) {
-#if defined(IS_CUDA)
-  cudaFree(ff_variable);
-  cudaFree(areas);
-  cudaFree(elements_surrounding_elements);
-  cudaFree(normals);
-  cudaFree(variables);
-  cudaFree(old_variables);
-  cudaFree(fluxes);
-  cudaFree(step_factors);
-#elif defined(IS_HIP)
-  hipFree(ff_variable);
-  hipFree(areas);
-  hipFree(elements_surrounding_elements);
-  hipFree(normals);
-  hipFree(variables);
-  hipFree(old_variables);
-  hipFree(fluxes);
-  hipFree(step_factors);
-#else
-  ff_variable.free();
-  areas.free();
-  elements_surrounding_elements.free();
-  normals.free();
-  variables.free();
-  old_variables.free();
-  fluxes.free();
-  step_factors.free();
-#endif
 }
 
 template <typename FArr, typename IArr>
@@ -435,7 +438,9 @@ static bool footer(const TimerGroup &tg, FArr &ff_variable, FArr &areas,
     std::cout << " WARNING: Not checking output (no reference file) \n";
     std::cout << "--------------------------------------------------\n";
   } else {
-    std::cout << "\n  Checking final result..." << std::flush;
+    char buf[16];
+    snprintf(buf, 16, "%.6g", epsilon);
+    std::cout << "\n  Checking with epsilon = " << buf << " ..." << std::flush;
     ok = check(outFile, checkFile);
     if (!ok)
       std::cout << "  FAIL!\n\n";

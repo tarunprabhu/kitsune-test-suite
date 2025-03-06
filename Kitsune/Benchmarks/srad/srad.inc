@@ -152,6 +152,48 @@ template <typename Arr> static void randomFill(Arr &I, int rows, int cols) {
 }
 
 template <typename FArr, typename IArr>
+static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
+                    IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE) {
+#if defined(IS_CUDA)
+  cudaFree(I);
+  cudaFree(J);
+  cudaFree(c);
+  cudaFree(iN);
+  cudaFree(iS);
+  cudaFree(jW);
+  cudaFree(jE);
+  cudaFree(dN);
+  cudaFree(dS);
+  cudaFree(dW);
+  cudaFree(dE);
+#elif defined(IS_HIP)
+  hipFree(I);
+  hipFree(J);
+  hipFree(c);
+  hipFree(iN);
+  hipFree(iS);
+  hipFree(jW);
+  hipFree(jE);
+  hipFree(dN);
+  hipFree(dS);
+  hipFree(dW);
+  hipFree(dE);
+#else
+  I.free();
+  J.free();
+  c.free();
+  iN.free();
+  iS.free();
+  jW.free();
+  jE.free();
+  dN.free();
+  dS.free();
+  dW.free();
+  dE.free();
+#endif // CPU
+}
+
+template <typename FArr, typename IArr>
 static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                   IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE, int rows,
                   int cols) {
@@ -220,11 +262,14 @@ static void header(const std::string &label, FArr &I, FArr &J, FArr &c,
   std::cout << "  Starting benchmark ... " << std::flush;
 }
 
+// FIXME: We may be able to lower the tolerance once Kitsune correctly handles
+// the fp-contract option.
+static constexpr float epsilon = 1e-4;
+
 // Returns -1 if the sizes of the files mismatch. If the files are identical,
 // returns 0. Otherwise returns the index of the float that mismatched.
 static int check(const std::string &outFile, const std::string &checkFile,
                  int n) {
-  float epsilon = 1e-6;
   FILE *fa = fopen(outFile.c_str(), "rb");
   FILE *fe = fopen(checkFile.c_str(), "rb");
   float *ev = (float *)malloc(n * sizeof(float));
@@ -257,56 +302,16 @@ static int check(const std::string &outFile, const std::string &checkFile,
     std::cout << " WARNING: Not checking output (no reference file) \n";
     std::cout << "--------------------------------------------------\n";
   } else {
+    char buf[16];
+    snprintf(buf, 16, "%.6g", epsilon);
+    std::cout << "\n  Checking with epsilon = " << buf << " ..." << std::flush;
     mismatch = check(outFile, checkFile, rows * cols);
-    std::cout << "\n  Checking final result..." << std::flush;
     if (mismatch)
       std::cout << "  FAIL! Output mismatch at byte " << mismatch << "\n\n";
     else
       std::cout << "  pass\n\n";
   }
   return mismatch;
-}
-
-template <typename FArr, typename IArr>
-static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
-                    IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE) {
-#if defined(IS_CUDA)
-  cudaFree(I);
-  cudaFree(J);
-  cudaFree(c);
-  cudaFree(iN);
-  cudaFree(iS);
-  cudaFree(jW);
-  cudaFree(jE);
-  cudaFree(dN);
-  cudaFree(dS);
-  cudaFree(dW);
-  cudaFree(dE);
-#elif defined(IS_HIP)
-  hipFree(I);
-  hipFree(J);
-  hipFree(c);
-  hipFree(iN);
-  hipFree(iS);
-  hipFree(jW);
-  hipFree(jE);
-  hipFree(dN);
-  hipFree(dS);
-  hipFree(dW);
-  hipFree(dE);
-#else
-  I.free();
-  J.free();
-  c.free();
-  iN.free();
-  iS.free();
-  jW.free();
-  jE.free();
-  dN.free();
-  dS.free();
-  dW.free();
-  dE.free();
-#endif // CPU
 }
 
 template <typename FArr, typename IArr>

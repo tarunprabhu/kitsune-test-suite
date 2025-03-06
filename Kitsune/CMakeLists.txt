@@ -27,10 +27,6 @@ set(KITSUNE_SKIP_TAPIR_TARGETS "" CACHE STRING
   "The list of tapir targets to skip. Each element of this list must be a \
 value that can be passed to the -ftapir= option of the frontend")
 
-set(KITSUNE_TEST_INPUT_SIZE "small" CACHE STRING
-  "The size of the input in the tests that support it. Must be one of \
-\"small\", or \"medium\". Defaults to \"small\"")
-
 set(KITSUNE_CUDA_ARCH "" CACHE STRING
   "Kitsune can only compile for a single GPU, and must be given the GPU \
 architecture if Kitsune's default is not suitable. This simply adds the \
@@ -61,7 +57,8 @@ option(KITSUNE_BENCHMARK
   "Build and run the performance tests. The tests in the Benchmarks directory \
 are intended to be used for both correctness testing and performance. Setting \
 this option will result in the non-kitsune single-source tests (.cu, .hip \
-etc.) being built and run. This implies KITSUNE_TEST_INPUT_SIZE=medium"
+etc.) being built and run. This will only run a subset of the tests that are \
+intended as benchmarks. NOTE: This will skip some correctness checks"
   OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
@@ -276,12 +273,6 @@ foreach (TAPIR_TARGET ${KITSUNE_SKIP_TAPIR_TARGETS})
   endif ()
 endforeach ()
 
-# Sanity check the test input size
-if (NOT KITSUNE_TEST_INPUT_SIZE STREQUAL "small" AND
-    NOT KITSUNE_TEST_INPUT_SIZE STREQUAL "medium")
-  message(FATAL_ERROR "Unknown test input size: ${KITSUNE_TEST_INPUT_SIZE}")
-endif ()
-
 execute_process(COMMAND "${KIT_CONFIG}" --tapir-targets
   OUTPUT_VARIABLE TAPIR_TARGETS_STR
   OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -386,19 +377,8 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
     set(TEST_REALM_TARGET ON)
     message(STATUS "Testing tapir target: ${tapir_target}")
   elseif (tapir_target STREQUAL "serial")
-    # The serial tapir target can be very, very slow. There is also absolutely
-    # no reason to run it with anything larger than the smallest input sizes.
-    # Since the larger input sizes are only intended to be used for performance
-    # comparisons, just disable the serial tapir target in that case. The more
-    # common use for this is for correctness checks and the small problem sizes
-    # are sufficient for that.
-    if (NOT KITSUNE_TEST_INPUT_SIZE STREQUAL "small")
-      message(WARNING "Disabling tapir target 'serial' \
-(test input size is '${KITSUNE_TEST_INPUT_SIZE}')")
-    else ()
-      set(TEST_SERIAL_TARGET ON)
-      message(STATUS "Testing tapir target: ${tapir_target}")
-    endif ()
+    set(TEST_SERIAL_TARGET ON)
+    message(STATUS "Testing tapir target: ${tapir_target}")
   else ()
     message(FATAL_ERROR "Unknown tapir target: ${tapir_target}")
   endif ()
@@ -461,14 +441,6 @@ endif ()
 # when doing performance comparisons.
 if (TEST_KOKKOS_MODE AND KITSUNE_BENCHMARK)
   set(TEST_KOKKOS_LANG ON)
-endif ()
-
-# When running benchmarks, don't use the small input size. If we ever add a
-# "large" size, that should automatically get accommodated here.
-if (KITSUNE_BENCHMARK)
-  if (KITSUNE_TEST_INPUT_SIZE STREQUAL "small")
-    set(KITSUNE_TEST_INPUT_SIZE "medium")
-  endif ()
 endif ()
 
 # CMake adds -Werror=date-time in order to get reproducible builds. This is a

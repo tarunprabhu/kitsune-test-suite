@@ -122,6 +122,20 @@ static void parseCommandLineInto(int argc, char *argv[], unsigned &sampleCount,
 }
 
 template <typename Img, typename RawImg>
+static void dealloc(Img &img, RawImg &rawImg) {
+#if defined(IS_CUDA)
+  cudaFree(img);
+  cudaFree(rawImg);
+#elif defined(IS_HIP)
+  hipFree(img);
+  hipFree(rawImg);
+#else
+  img.free();
+  rawImg.free();
+#endif
+}
+
+template <typename Img, typename RawImg>
 static void alloc(Img &img, RawImg &rawImg, unsigned imageWidth,
                   unsigned imageHeight) {
   unsigned imageSize = imageWidth * imageHeight;
@@ -154,26 +168,15 @@ static void header(const std::string &label, Img &img, RawImg &rawImg,
   std::cout << "  Running benchmark ... " << std::flush;
 }
 
-template <typename Img, typename RawImg>
-static void dealloc(Img &img, RawImg &rawImg) {
-#if defined(IS_CUDA)
-  cudaFree(img);
-  cudaFree(rawImg);
-#elif defined(IS_HIP)
-  hipFree(img);
-  hipFree(rawImg);
-#else
-  img.free();
-  rawImg.free();
-#endif
-}
+// FIXME: It is absolutely ridiculous that the epsilon here is so large. But
+// nothing else passes. The code itself seems to be incredibly unstable, so
+// perhaps this is to be expected.
+static constexpr float epsilon = 10;
 
 // If there is a mismatch in the output, return the pixel at which the output
 // did not match. If the size of the image does not match, return -1. If the
 // output matches, return 0.
 static int check(const std::string &checkFile, const std::string &outFile) {
-  const float epsilon = 10;
-
   FILE *fa = fopen(outFile.c_str(), "rb");
   FILE *fe = fopen(checkFile.c_str(), "rb");
 
@@ -255,13 +258,14 @@ static int footer(TimerGroup &tg, Img &img, RawImg &rawImg, unsigned imageWidth,
     checkFile = gpuRefFile;
 #endif // !IS_CUDA && !IS_HIP
 
-  int mismatch = -3;
+  int mismatch = 0;
   if (!checkFile.size()) {
     std::cout << "--------------------------------------------------\n";
     std::cout << " WARNING: Not checking output (no reference file) \n";
     std::cout << "--------------------------------------------------\n";
   } else {
     std::cout << "\n  Checking final result..." << std::flush;
+    mismatch = -3;
     mismatch = check(outFile, checkFile);
     if (mismatch == -2)
       std::cout << "  FAIL! (File size mismatch)\n\n";

@@ -79,7 +79,7 @@ function (register_test target tapir_target cmdargs data)
 
   # We need to set the tapir flags on the link options, otherwise the runtime
   # libraries (kitrt, opencilk etc.) will not be linked in correctly.
-  set(tapir_flags "-ftapir=${tapir_target}")
+  set(tapir_flags "--tapir=${tapir_target}")
   if (NOT tapir_target STREQUAL "none")
     target_compile_options(${target} BEFORE PUBLIC "${tapir_flags}")
     target_link_options(${target} BEFORE PUBLIC "${tapir_flags}")
@@ -140,18 +140,11 @@ function (kit_singlesource_test source lang tapir_target cmdargs data)
     set_target_properties(${target} PROPERTIES CUDA_ARCHITECTURES "native")
   endif ()
 
-  # There is a desire to set -fno-exceptions automatically when the Kitsune
-  # frontend is used. When that wish is fulfilled, this should be removed.
-  if (lang STREQUAL "kitc++" OR lang STREQUAL "kokkos")
-    target_compile_options(${target} BEFORE PUBLIC "-fno-exceptions")
-  endif ()
-
   # We probably need the kokkos flags on the linker as well because Kokkos'
   # runtime does need to be linked, but I am not entirely certain.
-  set(kokkos_flags "-fkokkos;-fkokkos-no-init")
   if (lang STREQUAL "kokkos")
-    target_compile_options(${target} BEFORE PUBLIC "${kokkos_flags}")
-    target_link_options(${target} BEFORE PUBLIC "${kokkos_flags}")
+    target_compile_options(${target} BEFORE PUBLIC -fkokkos -fkokkos-no-init)
+    target_link_options(${target} BEFORE PUBLIC -fkokkos)
   endif ()
 endfunction()
 
@@ -291,7 +284,7 @@ endfunction()
 #     base          The base name of the target
 #     type          Must be one of "EXECUTABLE", "SHARED", or "STATIC"
 #     tapir_target  The tapir target. This must be a target that is a valid
-#                   argument of the -ftapir flag
+#                   argument of the --tapir flag
 #     kokkos        If ON, kokkos mode should be enabled on the target
 #     cmdargs       A list of command line arguments to be passed when running
 #                   the test
@@ -322,20 +315,27 @@ macro(make_target base type tapir_target kokkos out)
   target_include_directories(${target} PUBLIC
     ${CMAKE_SOURCE_DIR}/Kitsune/include)
 
-  set(tapir_flags "-ftapir=${tapir_target}")
+  set(tapir_flags "--tapir=${tapir_target}")
   target_compile_options(${target} BEFORE PUBLIC -flto ${tapir_flags})
-
-  # FIXME: The -fno-exceptions might cause problems in Fortran (should be
-  # ignored in C). We should change Kitsune to disable exceptions by default
-  # when Tapir is enabled. Once that is done, this flag should be removed.
-  target_compile_options(${target} PUBLIC -fno-exceptions)
-
   target_link_options(${target} PUBLIC ${tapir_flags} -flto)
 
+  # We need this only because Kitsune cannot currently automatically detect the
+  # architecture of the GPU for which we are compiling. When we can do this
+  # automatically, or if we resort to creating a multi-target fat binary with
+  # a range of architectures supported, this should go away.
+  if (${tapir_target} STREQUAL "cuda" AND NOT KITSUNE_CUDA_ARCH STREQUAL "")
+    target_link_options(${target} PUBLIC
+      -Wl,-plugin-opt=--cuabi-arch=${KITSUNE_CUDA_ARCH})
+  endif ()
+
+  if (${tapir_target} STREQUAL "hip" AND NOT KITSUNE_HIP_ARCH STREQUAL "")
+    target_link_options(${target} PUBLIC
+      -Wl,-plugin-opt=--hipabi-arch=${KITSUNE_HIP_ARCH})
+  endif ()
+
   if (kokkos)
-    set(kokkos_flags "-fkokkos -fkokkos-no-init")
-    target_compile_options(${target} BEFORE PUBLIC ${kokkos_flags})
-    target_link_options(${target} BEFORE PUBLIC ${kokkos_flags})
+    target_compile_options(${target} BEFORE PUBLIC -fkokkos -fkokkos-no-init)
+    target_link_options(${target} BEFORE PUBLIC -fkokkkos)
   endif ()
 
   list(APPEND ${out} ${target})
