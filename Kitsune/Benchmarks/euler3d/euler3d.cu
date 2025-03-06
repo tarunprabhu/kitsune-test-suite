@@ -4,13 +4,11 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <kitsune.h>
 #include <string>
 
 #include "timing.h"
 
 namespace fs = std::filesystem;
-using namespace kitsune;
 
 #define IS_CUDA
 #include "euler3d.inc"
