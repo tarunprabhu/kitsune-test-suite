@@ -94,7 +94,7 @@ template <typename Arr> static void randomFill(Arr &arr, size_t n) {
   for (size_t i = 0; i < n; ++i) {
     ElementType r1 = rand();
     ElementType r2 = rand();
-    arr[i] = (r1 / RAND_MAX) * r2;
+    arr[i] = (r1 / float(RAND_MAX)) * r2;
   }
 }
 

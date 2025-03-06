@@ -146,9 +146,7 @@ static void parseCommandLineInto(int argc, char *argv[], int &niter, int &rows,
 template <typename Arr> static void randomFill(Arr &I, int rows, int cols) {
   for (int i = 0; i < rows; i++) {
     for (int j = 0; j < cols; j++) {
-      float r1 = rand();
-      float r2 = rand();
-      I[i * cols + j] = (r1 / float(RAND_MAX)) * r2;
+      I[i * cols + j] = (rand() / float(RAND_MAX));
     }
   }
 }
