@@ -90,14 +90,28 @@ static void parseCommandLineInto(int argc, char *argv[], size_t &n,
   }
 }
 
+using ElementType = float;
+
+const ElementType A =
+    (ElementType(1.0) / rand()) * std::numeric_limits<ElementType>::max();
+
+template <typename Arr> static void randomFill(Arr &arr, size_t n) {
+  for (size_t i = 0; i < n; ++i) {
+    arr[i] = ElementType(rand()) / ElementType(RAND_MAX);
+  }
+}
+
+static constexpr ElementType epsilon = 0.0;
+
 template <typename Arr>
-static size_t check(ElementType a, const Arr &x, const Arr &y, const Arr &r,
-                    size_t n) {
-  std::cout << "\n  Checking final result..." << std::flush;
+static size_t check(const Arr &x, const Arr &y, const Arr &r, size_t n) {
+  char buf[16];
+  snprintf(buf, 16, "%.6g", epsilon);
+  std::cout << "\n  Checking with epsilon = " << buf << " ..." << std::flush;
 
   size_t errors = 0;
   for (size_t i = 0; i < n; i++)
-    if (r[i] != a * x[i] + y[i])
+    if (checkRelErr(A * x[i] + y[i], r[i], epsilon))
       errors++;
 
   if (errors)
@@ -109,15 +123,15 @@ static size_t check(ElementType a, const Arr &x, const Arr &y, const Arr &r,
 }
 
 template <typename Arr> static void alloc(Arr &x, Arr &y, Arr &r, size_t n) {
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaMallocManaged(&x, n * sizeof(ElementType));
   cudaMallocManaged(&y, n * sizeof(ElementType));
   cudaMallocManaged(&r, n * sizeof(ElementType));
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipMallocManaged(&x, n * sizeof(ElementType));
   (void)hipMallocManaged(&y, n * sizeof(ElementType));
   (void)hipMallocManaged(&r, n * sizeof(ElementType));
-#else
+#else // CPU
   x.alloc(n);
   y.alloc(n);
   r.alloc(n);
@@ -125,9 +139,8 @@ template <typename Arr> static void alloc(Arr &x, Arr &y, Arr &r, size_t n) {
 }
 
 template <typename Arr>
-static void header(const std::string &label, ElementType a, Arr &x, Arr &y,
-                   Arr &r, size_t n) {
-  srand(0);
+static void header(const std::string &label, Arr &x, Arr &y, Arr &r, size_t n) {
+  srand(7);
   std::cout << "\n";
   std::cout << "---- saxpy benchmark (" << label << ") ----\n"
             << "  Vector size: " << n << " elements.\n\n";
@@ -135,21 +148,23 @@ static void header(const std::string &label, ElementType a, Arr &x, Arr &y,
             << std::flush;
 
   alloc(x, y, r, n);
+  randomFill(x, n);
+  randomFill(y, n);
 
   std::cout << "  done.\n\n";
   std::cout << "  Starting benchmark...\n\n";
 }
 
 template <typename Arr> static void dealloc(Arr &x, Arr &y, Arr &r) {
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaFree(x);
   cudaFree(y);
   cudaFree(r);
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipFree(x);
   (void)hipFree(y);
   (void)hipFree(r);
-#else // CPU
+#else  // CPU
   x.free();
   y.free();
   r.free();
@@ -157,9 +172,8 @@ template <typename Arr> static void dealloc(Arr &x, Arr &y, Arr &r) {
 }
 
 template <typename Arr>
-static size_t footer(TimerGroup &tg, ElementType a, Arr &x, Arr &y, Arr &r,
-                     size_t n) {
-  size_t errors = check(a, x, y, r, n);
+static size_t footer(TimerGroup &tg, Arr &x, Arr &y, Arr &r, size_t n) {
+  size_t errors = check(x, y, r, n);
   dealloc(x, y, r);
   if (showJSON)
     tg.json(std::cout);

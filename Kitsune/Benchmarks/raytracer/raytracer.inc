@@ -60,7 +60,7 @@ static void parseCommandLineInto(int argc, char *argv[], unsigned &sampleCount,
                                  std::string &cpuRefFile,
                                  std::string &gpuRefFile,
                                  unsigned *tpb = nullptr) {
-  std::string base = fs::path(argv[0]).filename().string();
+  std::string base = std::filesystem::path(argv[0]).filename().string();
   imgFile = base + ".ppm";
   outFile = base + ".dat";
   sampleCount = 128;
@@ -123,10 +123,10 @@ static void parseCommandLineInto(int argc, char *argv[], unsigned &sampleCount,
 
 template <typename Img, typename RawImg>
 static void dealloc(Img &img, RawImg &rawImg) {
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaFree(img);
   cudaFree(rawImg);
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipFree(img);
   (void)hipFree(rawImg);
 #else
@@ -139,10 +139,10 @@ template <typename Img, typename RawImg>
 static void alloc(Img &img, RawImg &rawImg, unsigned imageWidth,
                   unsigned imageHeight) {
   unsigned imageSize = imageWidth * imageHeight;
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaMallocManaged(&img, imageSize * sizeof(Pixel));
   cudaMallocManaged(&rawImg, imageSize * sizeof(Vec));
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipMallocManaged(&img, imageSize * sizeof(Pixel));
   (void)hipMallocManaged(&rawImg, imageSize * sizeof(Vec));
 #else
@@ -173,12 +173,14 @@ static void header(const std::string &label, Img &img, RawImg &rawImg,
 // perhaps this is to be expected.
 static constexpr float epsilon = 10;
 
-// If there is a mismatch in the output, return the pixel at which the output
-// did not match. If the size of the image does not match, return -1. If the
-// output matches, return 0.
+// If there is a mismatch in the output, return the number of mismatches. If the
+// size of the image does not match, return -1. If the output matches, return 0.
 static int check(const std::string &checkFile, const std::string &outFile) {
+  int errors = 0;
   FILE *fa = fopen(outFile.c_str(), "rb");
   FILE *fe = fopen(checkFile.c_str(), "rb");
+  Vec *av = nullptr;
+  Vec *ev = nullptr;
 
   unsigned ew, aw;
   unsigned eh, ah;
@@ -186,31 +188,31 @@ static int check(const std::string &checkFile, const std::string &outFile) {
   fread(&eh, sizeof(unsigned), 1, fe);
   fread(&aw, sizeof(unsigned), 1, fa);
   fread(&ah, sizeof(unsigned), 1, fa);
-  if (ew != aw or eh != ah)
-    return -1;
-
-  Vec *ev = (Vec *)malloc(sizeof(Vec) * ew * eh);
-  Vec *av = (Vec *)malloc(sizeof(Vec) * aw * ah);
-
-  size_t re = fread(ev, sizeof(Vec), ew * eh, fe);
-  size_t ra = fread(av, sizeof(Vec), aw * ah, fa);
-  if (re != ra)
-    return -2;
-
-  for (unsigned i = 0; i < ew * eh; ++i) {
-    if (fabs(ev[i].x - av[i].x) > epsilon or
-        fabs(ev[i].y - av[i].y) > epsilon or
-        fabs(ev[i].z - av[i].z) > epsilon) {
-      return i + 1;
-    }
+  if (ew != aw or eh != ah) {
+    errors = -1;
+    goto cleanup;
   }
 
+  ev = (Vec *)malloc(sizeof(Vec) * ew * eh);
+  av = (Vec *)malloc(sizeof(Vec) * aw * ah);
+
+  fread(ev, sizeof(Vec), ew * eh, fe);
+  fread(av, sizeof(Vec), aw * ah, fa);
+
+  for (unsigned i = 0; i < ew * eh; ++i) {
+    if (checkRelErr(av[i].x, ev[i].x, epsilon) or
+        checkRelErr(av[i].y, ev[i].y, epsilon) or
+        checkRelErr(av[i].z, ev[i].z, epsilon))
+      ++errors;
+  }
+
+cleanup:
   free(ev);
   free(av);
   fclose(fe);
   fclose(fa);
 
-  return 0;
+  return errors;
 }
 
 template <typename Img>
@@ -250,13 +252,13 @@ static int footer(TimerGroup &tg, Img &img, RawImg &rawImg, unsigned imageWidth,
   saveRaw(rawImg, imageWidth, imageHeight, outFile);
 
   std::string checkFile = cpuRefFile;
-#if defined(IS_CUDA) || defined(IS_HIP)
+#if defined(__CUDACC__) || defined(__HIP__)
   checkFile = gpuRefFile;
 #else
   std::string tt = __kitsune_tt__;
   if (tt == "cuda" or tt == "hip")
     checkFile = gpuRefFile;
-#endif // !IS_CUDA && !IS_HIP
+#endif // !__CUDACC__ && !__HIP__
 
   int mismatch = 0;
   if (!checkFile.size()) {

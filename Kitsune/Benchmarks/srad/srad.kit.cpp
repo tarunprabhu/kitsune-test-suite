@@ -1,20 +1,18 @@
-#include <cmath>
 #include <filesystem>
+#include <cmath>
 #include <iostream>
 #include <kitsune.h>
 
+#include "fpcmp.h"
 #include "timing.h"
-
-namespace fs = std::filesystem;
-using namespace kitsune;
 
 #include "srad.inc"
 
 int main(int argc, char *argv[]) {
-  mobile_ptr<float> I, J;
-  mobile_ptr<int> iN, iS, jE, jW;
-  mobile_ptr<float> dN, dS, dW, dE;
-  mobile_ptr<float> c;
+  kitsune::mobile_ptr<float> I, J;
+  kitsune::mobile_ptr<int> iN, iS, jE, jW;
+  kitsune::mobile_ptr<float> dN, dS, dW, dE;
+  kitsune::mobile_ptr<float> c;
   int rows, cols, size_I, size_R, niter;
   float q0sqr, tmp, meanROI, varROI;
   int r1, r2, c1, c2;
@@ -23,7 +21,7 @@ int main(int argc, char *argv[]) {
   std::string outFile;
 
   TimerGroup tg("srad");
-  Timer &main = tg.add("main", "Total");
+  Timer &total = tg.add("total", "Total");
   Timer &init = tg.add("init", "Init");
   Timer &iters = tg.add("iters", "Compute");
   Timer &loop1 = tg.add("loop1", "Loop 1");
@@ -34,7 +32,7 @@ int main(int argc, char *argv[]) {
   header("forall", I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, size_I, size_R,
          rows, cols, r1, r2, c1, c2, niter);
 
-  main.start();
+  total.start();
   init.start();
   // clang-format off
   forall(int i = 0; i < rows; i++) {
@@ -57,7 +55,7 @@ int main(int argc, char *argv[]) {
 
   // clang-format off
   forall(int k = 0; k < size_I; k++) {
-    J[k] = expf(I[k]);
+    J[k] = std::exp(I[k]);
   }
   // clang-format on
   init.stop();
@@ -129,7 +127,7 @@ int main(int argc, char *argv[]) {
     loop2.stop();
   }
   iters.stop();
-  main.stop();
+  total.stop();
 
   int mismatch = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows, cols,
                         outFile, cpuRefFile, gpuRefFile);

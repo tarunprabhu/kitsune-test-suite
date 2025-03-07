@@ -90,17 +90,19 @@ static void parseCommandLineInto(int argc, char *argv[], size_t &n,
   }
 }
 
+using ElementType = float;
+
 template <typename Arr> static void randomFill(Arr &arr, size_t n) {
   for (size_t i = 0; i < n; ++i) {
     ElementType r1 = rand();
     ElementType r2 = rand();
-    arr[i] = (r1 / float(RAND_MAX)) * r2;
+    arr[i] = (r1 / ElementType(RAND_MAX)) * r2;
   }
 }
 
 template <typename Arr>
 static size_t check(const Arr &dst, const Arr &src, size_t n) {
-  std::cout << "\n  Checking final result..." << std::flush;
+  std::cout << "\n  Checking with epsilon = 0 ..." << std::flush;
 
   size_t errors = 0;
   for (size_t i = 0; i < n; i++)
@@ -116,10 +118,10 @@ static size_t check(const Arr &dst, const Arr &src, size_t n) {
 }
 
 template <typename Arr> static void alloc(Arr &dst, Arr &src, size_t n) {
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaMallocManaged(&dst, n * sizeof(ElementType));
   cudaMallocManaged(&src, n * sizeof(ElementType));
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipMallocManaged(&dst, n * sizeof(ElementType));
   (void)hipMallocManaged(&src, n * sizeof(ElementType));
 #else
@@ -145,10 +147,10 @@ static void header(const std::string &label, Arr &dst, Arr &src, size_t n) {
 }
 
 template <typename Arr> static void dealloc(Arr &dst, Arr &src) {
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaFree(dst);
   cudaFree(src);
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipFree(dst);
   (void)hipFree(src);
 #else  // CPU

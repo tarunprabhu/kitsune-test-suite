@@ -3,11 +3,9 @@
 #include <hip/hip_runtime.h>
 #include <iostream>
 
+#include "fpcmp.h"
 #include "timing.h"
 
-using ElementType = float;
-
-#define IS_HIP
 #include "vecadd.inc"
 
 __global__ void vecadd(const ElementType *a, const ElementType *b,
@@ -26,18 +24,18 @@ int main(int argc, char *argv[]) {
   unsigned threadsPerBlock;
 
   TimerGroup tg("vecadd");
-  Timer &timer = tg.add("vecadd");
+  Timer &total = tg.add("total", "Total");
 
   parseCommandLineInto(argc, argv, n, iterations, &threadsPerBlock);
   header("hip", a, b, c, n);
 
   int blocksPerGrid = (n + threadsPerBlock - 1) / threadsPerBlock;
   for (unsigned t = 0; t < iterations; ++t) {
-    timer.start();
+    total.start();
     hipLaunchKernelGGL(vecadd, blocksPerGrid, threadsPerBlock, 0, 0, a, b, c,
                        n);
     (void)hipDeviceSynchronize();
-    uint64_t us = timer.stop();
+    uint64_t us = total.stop();
     std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
   }
 

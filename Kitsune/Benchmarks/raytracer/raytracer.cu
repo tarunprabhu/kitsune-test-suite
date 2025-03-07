@@ -5,9 +5,8 @@
 #include <fstream>
 #include <iostream>
 
+#include "fpcmp.h"
 #include "timing.h"
-
-namespace fs = std::filesystem;
 
 struct Vec {
   float x, y, z;
@@ -31,7 +30,6 @@ struct Vec {
   }
 };
 
-#define IS_CUDA
 #include "raytracer.inc"
 
 __forceinline__ __device__ float randomVal(unsigned int &x) {
@@ -224,7 +222,7 @@ int main(int argc, char **argv) {
                        &threadsPerBlock);
 
   TimerGroup tg("raytracer");
-  Timer &main = tg.add("main", "Total");
+  Timer &total = tg.add("total", "Total");
 
   header("cuda", img, rawImg, sampleCount, imageWidth, imageHeight);
 
@@ -235,7 +233,7 @@ int main(int argc, char **argv) {
   Pathtracer<<<blocksPerGrid, threadsPerBlock>>>(sampleCount, img, rawImg,
                                                  imageWidth, imageHeight);
   cudaDeviceSynchronize();
-  main.stop();
+  total.stop();
 
   int mismatch = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,
                         outFile, cpuRefFile, gpuRefFile);

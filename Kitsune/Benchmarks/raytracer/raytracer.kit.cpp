@@ -5,12 +5,9 @@
 #include <fstream>
 #include <iostream>
 #include <kitsune.h>
-#include <string>
 
+#include "fpcmp.h"
 #include "timing.h"
-
-namespace fs = std::filesystem;
-using namespace kitsune;
 
 struct Vec {
   float x, y, z;
@@ -178,18 +175,18 @@ int main(int argc, char **argv) {
   std::string outFile;
   std::string cpuRefFile;
   std::string gpuRefFile;
-  mobile_ptr<Pixel> img;
-  mobile_ptr<Vec> rawImg;
+  kitsune::mobile_ptr<Pixel> img;
+  kitsune::mobile_ptr<Vec> rawImg;
 
   parseCommandLineInto(argc, argv, sampleCount, imageWidth, imageHeight,
                        imgFile, outFile, cpuRefFile, gpuRefFile);
 
   TimerGroup tg("raytracer");
-  Timer &main = tg.add("main", "Total");
+  Timer &total = tg.add("total", "Total");
 
   header("forall", img, rawImg, sampleCount, imageWidth, imageHeight);
 
-  main.start();
+  total.start();
   forall(unsigned int i = 0; i < imageWidth * imageHeight; ++i) {
     int x = i % imageWidth;
     int y = i / imageWidth;
@@ -224,7 +221,7 @@ int main(int argc, char **argv) {
     img[i].g = (unsigned char)color.y;
     img[i].b = (unsigned char)color.z;
   }
-  main.stop();
+  total.stop();
 
   int mismatch = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,
                         outFile, cpuRefFile, gpuRefFile);

@@ -6,9 +6,8 @@
 #include <hip/hip_runtime.h>
 #include <iostream>
 
+#include "fpcmp.h"
 #include "timing.h"
-
-namespace fs = std::filesystem;
 
 struct Vec {
   float x, y, z;
@@ -32,7 +31,6 @@ struct Vec {
   }
 };
 
-#define IS_HIP
 #include "raytracer.inc"
 
 __forceinline__ __device__ float randomVal(unsigned int &x) {
@@ -225,18 +223,18 @@ int main(int argc, char **argv) {
                        &threadsPerBlock);
 
   TimerGroup tg("raytracer");
-  Timer &main = tg.add("main", "Total");
+  Timer &total = tg.add("total", "Total");
 
   header("hip", img, rawImg, sampleCount, imageWidth, imageHeight);
 
-  main.start();
+  total.start();
   unsigned totalPixels = imageWidth * imageHeight;
   unsigned blocksPerGrid =
       (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
   hipLaunchKernelGGL(Pathtracer, blocksPerGrid, threadsPerBlock, 0, 0,
                      sampleCount, img, rawImg, imageWidth, imageHeight);
   (void)hipDeviceSynchronize();
-  main.stop();
+  total.stop();
 
   int mismatch = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,
                         outFile, cpuRefFile, gpuRefFile);

@@ -6,11 +6,10 @@
 #include <fstream>
 #include <iostream>
 #include <kitsune.h>
-#include <string>
 
+#include "fpcmp.h"
 #include "timing.h"
 
-namespace fs = std::filesystem;
 using namespace kitsune;
 
 #include "euler3d.inc"
@@ -343,30 +342,27 @@ int main(int argc, char *argv[]) {
   Float3 ff_flux_contribution_momentum_z;
   Float3 ff_flux_contribution_density_energy;
 
-  parseCommandLineInto(argc, argv, domainFile, iterations, cpuRefFile,
+  parseCommandLineInto(argc, argv, domainFile, iterations, outFile, cpuRefFile,
                        gpuRefFile);
 
   TimerGroup tg("euler3d");
-  Timer &main = tg.add("main", "Total");
+  Timer &total = tg.add("total", "Total");
   Timer &init = tg.add("init", "Init");
   Timer &iters = tg.add("iters", "Compute");
   Timer &copy = tg.add("copy", "Copy");
   Timer &sf = tg.add("step_factor", "Step factor");
   Timer &rk = tg.add("rk", "Runge-Kutta");
 
-  outFile = fs::path(argv[0]).filename().string() + ".dat";
-
   header("forall", domainFile, iterations);
 
-  // read in domain geometry
+  // read in domain geometry and create arrays
   read_domain(ff_variable, areas, elements_surrounding_elements, normals,
               variables, old_variables, fluxes, step_factors,
               ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y,
               ff_flux_contribution_momentum_z,
               ff_flux_contribution_density_energy, nel, nelr, domainFile);
 
-  // Create arrays and set initial conditions
-  main.start();
+  total.start();
   init.start();
   initialize_variables(nelr, variables, ff_variable);
   init.stop();
@@ -395,7 +391,7 @@ int main(int argc, char *argv[]) {
     rk.stop();
   }
   iters.stop();
-  main.stop();
+  total.stop();
 
   // ok will be true (non-zero) on success. But the OS needs 0 to indicate
   // success.

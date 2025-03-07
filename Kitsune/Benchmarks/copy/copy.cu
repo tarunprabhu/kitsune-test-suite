@@ -5,9 +5,6 @@
 
 #include "timing.h"
 
-using ElementType = float;
-
-#define IS_CUDA
 #include "copy.inc"
 
 __global__ void copy(ElementType *dst, const ElementType *src, size_t n) {
@@ -24,17 +21,17 @@ int main(int argc, char *argv[]) {
   unsigned threadsPerBlock;
 
   TimerGroup tg("copy");
-  Timer &timer = tg.add("copy");
+  Timer &total = tg.add("total", "Total");
 
   parseCommandLineInto(argc, argv, n, iterations, &threadsPerBlock);
   header("cuda", dst, src, n);
 
   int blocksPerGrid = (n + threadsPerBlock - 1) / threadsPerBlock;
   for (unsigned t = 0; t < iterations; ++t) {
-    timer.start();
+    total.start();
     copy<<<blocksPerGrid, threadsPerBlock>>>(dst, src, n);
     cudaDeviceSynchronize();
-    uint64_t us = timer.stop();
+    uint64_t us = total.stop();
     std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
   }
 

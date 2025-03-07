@@ -72,7 +72,7 @@ static bool showJSON = false;
 
 static void parseCommandLineInto(int argc, char *argv[],
                                  std::string &domainFile, int &iterations,
-                                 std::string &cpuRefFile,
+                                 std::string &outFile, std::string &cpuRefFile,
                                  std::string &gpuRefFile,
                                  unsigned *tpb = nullptr) {
   iterations = 4000;
@@ -82,6 +82,7 @@ static void parseCommandLineInto(int argc, char *argv[],
     // This is loosely for consistency with the launch parameters from kitsune.
     *tpb = 256;
   }
+  outFile = std::filesystem::path(argv[0]).filename().string() + ".dat";
 
   char flag;
   while ((flag = getopt(argc, argv, "c:g:hjt:")) != -1) {
@@ -136,7 +137,7 @@ static void dealloc(FArr &ff_variable, FArr &areas,
                     IArr &elements_surrounding_elements, FArr &normals,
                     FArr &variables, FArr &old_variables, FArr &fluxes,
                     FArr &step_factors) {
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaFree(ff_variable);
   cudaFree(areas);
   cudaFree(elements_surrounding_elements);
@@ -145,7 +146,7 @@ static void dealloc(FArr &ff_variable, FArr &areas,
   cudaFree(old_variables);
   cudaFree(fluxes);
   cudaFree(step_factors);
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipFree(ff_variable);
   (void)hipFree(areas);
   (void)hipFree(elements_surrounding_elements);
@@ -171,7 +172,7 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                   IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE, int rows,
                   int cols) {
   int size_I = rows * cols;
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaMallocManaged(&I, size_I * sizeof(float));
   cudaMallocManaged(&J, size_I * sizeof(float));
   cudaMallocManaged(&c, size_I * sizeof(float));
@@ -183,7 +184,7 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   cudaMallocManaged(&dS, size_I * sizeof(float));
   cudaMallocManaged(&dW, size_I * sizeof(float));
   cudaMallocManaged(&dE, size_I * sizeof(float));
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipMallocManaged(&I, size_I * sizeof(float));
   (void)hipMallocManaged(&J, size_I * sizeof(float));
   (void)hipMallocManaged(&c, size_I * sizeof(float));
@@ -232,9 +233,9 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
             Float3 &ff_flux_contribution_density_energy, int &nel, int &nelr,
             const std::string &domainFile) {
 // these need to be computed the first time in order to compute time step
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaMallocManaged(&ff_variable, NVAR * sizeof(float));
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipMallocManaged(&ff_variable, NVAR * sizeof(float));
 #else
   ff_variable.alloc(NVAR);
@@ -280,7 +281,7 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
   nelr =
       block_length * ((nel / block_length) + std::min(1, nel % block_length));
 
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaMallocManaged(&areas, nelr * sizeof(float));
   cudaMallocManaged(&elements_surrounding_elements, nelr * NNB * sizeof(int));
   cudaMallocManaged(&normals, nelr * NDIM * NNB * sizeof(float));
@@ -288,7 +289,7 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
   cudaMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
   cudaMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
   cudaMallocManaged(&step_factors, nelr * sizeof(float));
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipMallocManaged(&areas, nelr * sizeof(float));
   (void)hipMallocManaged(&elements_surrounding_elements,
                          nelr * NNB * sizeof(int));
@@ -346,11 +347,15 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
 // the fp-contract option.
 static constexpr float epsilon = 1e-5;
 
+/// Check that the contents of the output file matches the expected values.
 static bool check(const std::string &out_file, const std::string &check_file) {
+  bool matches = true;
   char ec, ac;
 
   FILE *fa = fopen(out_file.c_str(), "rb");
   FILE *fe = fopen(check_file.c_str(), "rb");
+  float *av = nullptr;
+  float *ev = nullptr;
 
   int enel, anel;
   int enelr, anelr;
@@ -358,35 +363,43 @@ static bool check(const std::string &out_file, const std::string &check_file) {
   fread(&enelr, sizeof(int), 1, fe);
   fread(&anel, sizeof(int), 1, fa);
   fread(&anelr, sizeof(int), 1, fa);
-  if (anel != enel or anelr != enelr)
-    return false;
+  if (anel != enel or anelr != enelr) {
+    matches = false;
+    goto cleanup;
+  }
 
-  float *ev = (float *)malloc(sizeof(float) * enel);
-  float *av = (float *)malloc(sizeof(float) * anel);
+  ev = (float *)malloc(sizeof(float) * enel);
+  av = (float *)malloc(sizeof(float) * anel);
 
   fread(ev, sizeof(float), enel, fe);
   fread(av, sizeof(float), anel, fa);
-  for (int i = 0; i < enel; ++i)
-    if (fabs(ev[i] - av[i]) >= epsilon)
-      return false;
+  if (checkRelErr(av, ev, enel, epsilon)) {
+    matches = false;
+    goto cleanup;
+  }
 
   for (int j = 0; j < NDIM; ++j) {
     fread(ev, sizeof(float), enel, fe);
     fread(av, sizeof(float), anel, fa);
-    for (int i = 0; i < enel; ++i)
-      if (fabs(ev[i] - av[i]) >= epsilon)
-        return false;
+    if (checkRelErr(av, ev, enel, epsilon)) {
+      matches = false;
+      goto cleanup;
+    }
   }
 
   fread(ev, sizeof(float), enel, fe);
   fread(av, sizeof(float), anel, fa);
-  for (int i = 0; i < enel; ++i)
-    if (fabs(ev[i] - av[i]) >= epsilon)
-      return false;
+  if (checkRelErr(av, ev, enel, epsilon)) {
+    matches = false;
+    goto cleanup;
+  }
 
-  if (fgetc(fe) != EOF or fgetc(fa) != EOF)
-    return false;
+  if (fgetc(fe) != EOF or fgetc(fa) != EOF) {
+    matches = false;
+    goto cleanup;
+  }
 
+cleanup:
   free(ev);
   free(av);
   fclose(fe);
@@ -425,13 +438,13 @@ static bool footer(const TimerGroup &tg, FArr &ff_variable, FArr &areas,
   save(outFile, variables, nel, nelr);
 
   std::string checkFile = cpuRefFile;
-#if defined(IS_CUDA) || defined(IS_HIP)
+#if defined(__CUDACC__) || defined(__HIP__)
   checkFile = gpuRefFile;
 #else
   std::string tt = __kitsune_tt__;
   if (tt == "cuda" or tt == "hip")
     checkFile = gpuRefFile;
-#endif // !IS_CUDA && !IS_HIP
+#endif // !__CUDACC__ && !__HIP__
 
   bool ok = true;
   if (!checkFile.size()) {

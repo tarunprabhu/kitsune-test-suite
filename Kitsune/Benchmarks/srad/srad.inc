@@ -71,7 +71,7 @@ static void parseCommandLineInto(int argc, char *argv[], int &niter, int &rows,
     // This is loosely for consistency with the launch parameters from kitsune.
     *threadsPerBlock = 256;
   }
-  outFile = fs::path(argv[0]).filename().string() + ".dat";
+  outFile = std::filesystem::path(argv[0]).filename().string() + ".dat";
 
   char flag;
   while ((flag = getopt(argc, argv, "c:g:hjt:")) != -1) {
@@ -154,7 +154,7 @@ template <typename Arr> static void randomFill(Arr &I, int rows, int cols) {
 template <typename FArr, typename IArr>
 static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                     IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE) {
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaFree(I);
   cudaFree(J);
   cudaFree(c);
@@ -166,7 +166,7 @@ static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   cudaFree(dS);
   cudaFree(dW);
   cudaFree(dE);
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipFree(I);
   (void)hipFree(J);
   (void)hipFree(c);
@@ -198,7 +198,7 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                   IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE, int rows,
                   int cols) {
   int size_I = rows * cols;
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaMallocManaged(&I, size_I * sizeof(float));
   cudaMallocManaged(&J, size_I * sizeof(float));
   cudaMallocManaged(&c, size_I * sizeof(float));
@@ -210,7 +210,7 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   cudaMallocManaged(&dS, size_I * sizeof(float));
   cudaMallocManaged(&dW, size_I * sizeof(float));
   cudaMallocManaged(&dE, size_I * sizeof(float));
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipMallocManaged(&I, size_I * sizeof(float));
   (void)hipMallocManaged(&J, size_I * sizeof(float));
   (void)hipMallocManaged(&c, size_I * sizeof(float));
@@ -267,9 +267,11 @@ static void header(const std::string &label, FArr &I, FArr &J, FArr &c,
 static constexpr float epsilon = 1e-4;
 
 // Returns -1 if the sizes of the files mismatch. If the files are identical,
-// returns 0. Otherwise returns the index of the float that mismatched.
-static int check(const std::string &outFile, const std::string &checkFile,
-                 int n) {
+// returns 0. Otherwise returns the number of mismatches.
+static size_t check(const std::string &outFile, const std::string &checkFile,
+                    int n) {
+  size_t errors = 0;
+
   FILE *fa = fopen(outFile.c_str(), "rb");
   FILE *fe = fopen(checkFile.c_str(), "rb");
   float *ev = (float *)malloc(n * sizeof(float));
@@ -277,21 +279,28 @@ static int check(const std::string &outFile, const std::string &checkFile,
 
   int ne = fread(ev, sizeof(float), n, fe);
   int na = fread(av, sizeof(float), n, fa);
-  if (ne != na && na != n * sizeof(float))
-    return -1;
-  for (int i = 0; i < n; ++i)
-    if (fabs(ev[i] - av[i]) > epsilon)
-      return i + 1;
+  if (ne != na && na != n * sizeof(float)) {
+    errors = -1;
+    goto cleanup;
+  }
 
-  if (fgetc(fe) != EOF or fgetc(fa) != EOF)
-    return n + 1;
+  if (size_t errs = checkRelErr(av, ev, n, epsilon)) {
+    errors = errs;
+    goto cleanup;
+  }
 
+  if (fgetc(fe) != EOF or fgetc(fa) != EOF) {
+    errors = -2;
+    goto cleanup;
+  }
+
+cleanup:
   free(ev);
   free(av);
   fclose(fe);
   fclose(fa);
 
-  return 0;
+  return errors;
 }
 
 static int check(const std::string &outFile, const std::string &checkFile,
@@ -329,13 +338,14 @@ static size_t footer(TimerGroup &tg, FArr &I, FArr &J, FArr &c, IArr &iN,
   fclose(fp);
 
   std::string checkFile = cpuRefFile;
-#if defined(IS_CUDA) || defined(IS_HIP)
+#if defined(__CUDACC__) || defined(__HIP__)
+
   checkFile = gpuRefFile;
 #else
   std::string tt = __kitsune_tt__;
   if (tt == "cuda" or tt == "hip")
     checkFile = gpuRefFile;
-#endif // !IS_CUDA && !IS_HIP
+#endif // !__CUDACC__ && !__HIP__
 
   size_t errors = check(outFile, checkFile, rows, cols);
   dealloc(I, J, c, iN, iS, jE, jW, dN, dS, dW, dE);

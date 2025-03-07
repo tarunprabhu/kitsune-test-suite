@@ -90,21 +90,27 @@ static void parseCommandLineInto(int argc, char *argv[], size_t &n,
   }
 }
 
-template <typename Arr> static void randomFill(Arr &arr, size_t n) {
+using ElementType = float;
+
+template <typename Arr> static void randomFill(Arr &arr, size_t n, bool small) {
   for (size_t i = 0; i < n; ++i) {
-    ElementType r1 = rand();
-    ElementType r2 = rand();
-    arr[i] = (r1 / float(RAND_MAX)) * r2;
+    arr[i] = rand() / ElementType(RAND_MAX);
+    if (not small)
+      arr[i] *= rand();
   }
 }
 
+static constexpr ElementType epsilon = 0.0;
+
 template <typename Arr>
 static size_t check(const Arr &a, const Arr &b, const Arr &c, size_t n) {
-  std::cout << "\n  Checking final result..." << std::flush;
+  char buf[16];
+  snprintf(buf, 16, "%.6g", epsilon);
+  std::cout << "\n  Checking with epsilon = " << buf << " ..." << std::flush;
 
   size_t errors = 0;
   for (size_t i = 0; i < n; i++)
-    if (c[i] != a[i] + b[i])
+    if (checkRelErr(c[i], a[i] + b[i], epsilon))
       errors++;
 
   if (errors)
@@ -116,11 +122,11 @@ static size_t check(const Arr &a, const Arr &b, const Arr &c, size_t n) {
 }
 
 template <typename Arr> static void alloc(Arr &a, Arr &b, Arr &c, size_t n) {
-#if defined(IS_CUDA)
+#if defined(__CUDACC__)
   cudaMallocManaged(&a, n * sizeof(ElementType));
   cudaMallocManaged(&b, n * sizeof(ElementType));
   cudaMallocManaged(&c, n * sizeof(ElementType));
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipMallocManaged(&a, n * sizeof(ElementType));
   (void)hipMallocManaged(&b, n * sizeof(ElementType));
   (void)hipMallocManaged(&c, n * sizeof(ElementType));
@@ -141,19 +147,19 @@ static void header(const std::string &label, Arr &a, Arr &b, Arr &c, size_t n) {
             << std::flush;
 
   alloc(a, b, c, n);
-  randomFill(a, n);
-  randomFill(b, n);
+  randomFill(a, n, true);
+  randomFill(b, n, false);
 
   std::cout << "  done.\n\n";
   std::cout << "  Starting benchmark...\n\n";
 }
 
 template <typename Arr> static void dealloc(Arr &a, Arr &b, Arr &c) {
-#if defined(sIS_CUDA)
+#if defined(__CUDACC__)
   cudaFree(a);
   cudaFree(b);
   cudaFree(c);
-#elif defined(IS_HIP)
+#elif defined(__HIP__)
   (void)hipFree(a);
   (void)hipFree(b);
   (void)hipFree(c);

@@ -3,11 +3,9 @@
 #include <iostream>
 #include <stdlib.h>
 
+#include "fpcmp.h"
 #include "timing.h"
 
-namespace fs = std::filesystem;
-
-#define IS_CUDA
 #include "srad.inc"
 
 __global__ void initNS(int *iN, int *iS, int rows) {
@@ -29,12 +27,12 @@ __global__ void initWE(int *jW, int *jE, int cols) {
 __global__ void initJ(float *J, float *I, int size_I) {
   int k = blockDim.x * blockIdx.x + threadIdx.x;
   if (k < size_I)
-    J[k] = expf(I[k]);
+    J[k] = std::exp(I[k]);
 }
 
-__global__ void doLoop1(int rows, int cols, float *J, int *iN, int *iS, int *jE,
-                        int *jW, float *dN, float *dS, float *dE, float *dW,
-                        float q0sqr, float *c) {
+__global__ void loop1(int rows, int cols, float *J, int *iN, int *iS, int *jE,
+                      int *jW, float *dN, float *dS, float *dE, float *dW,
+                      float q0sqr, float *c) {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   if (i < rows) {
     for (int j = 0; j < cols; j++) {
@@ -69,9 +67,9 @@ __global__ void doLoop1(int rows, int cols, float *J, int *iN, int *iS, int *jE,
   }
 }
 
-__global__ void doLoop2(int rows, int cols, float *J, float *c, int *iS,
-                        int *jE, float *dN, float *dS, float *dE, float *dW,
-                        float lambda) {
+__global__ void loop2(int rows, int cols, float *J, float *c, int *iS, int *jE,
+                      float *dN, float *dS, float *dE, float *dW,
+                      float lambda) {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   if (i < rows) {
     for (int j = 0; j < cols; j++) {
@@ -104,11 +102,11 @@ int main(int argc, char *argv[]) {
   unsigned threadsPerBlock;
 
   TimerGroup tg("srad");
-  Timer &main = tg.add("main", "Total");
+  Timer &total = tg.add("total", "Total");
   Timer &init = tg.add("init", "Init");
   Timer &iters = tg.add("iters", "Compute");
-  Timer &loop1 = tg.add("loop1", "Loop 1");
-  Timer &loop2 = tg.add("loop2", "Loop 2");
+  Timer &tl1 = tg.add("loop1", "Loop 1");
+  Timer &tl2 = tg.add("loop2", "Loop 2");
 
   parseCommandLineInto(argc, argv, niter, rows, cols, r1, r2, c1, c2, lambda,
                        outFile, cpuRefFile, gpuRefFile, &threadsPerBlock);
@@ -120,9 +118,8 @@ int main(int argc, char *argv[]) {
   unsigned bpgCols = (cols + threadsPerBlock - 1) / threadsPerBlock;
   unsigned bpgSize = (size_I + threadsPerBlock - 1) / threadsPerBlock;
 
-  main.start();
+  total.start();
   init.start();
-
   initNS<<<bpgRows, threadsPerBlock>>>(iN, iS, rows);
   cudaDeviceSynchronize();
 
@@ -136,7 +133,6 @@ int main(int argc, char *argv[]) {
 
   initJ<<<bpgSize, threadsPerBlock>>>(J, I, size_I);
   cudaDeviceSynchronize();
-
   init.stop();
 
   iters.start();
@@ -154,20 +150,20 @@ int main(int argc, char *argv[]) {
     varROI = (sum2 / size_R) - meanROI * meanROI;
     q0sqr = varROI / (meanROI * meanROI);
 
-    loop1.start();
-    doLoop1<<<bpgRows, threadsPerBlock>>>(rows, cols, J, iN, iS, jE, jW, dN, dS,
-                                          dE, dW, q0sqr, c);
+    tl1.start();
+    loop1<<<bpgRows, threadsPerBlock>>>(rows, cols, J, iN, iS, jE, jW, dN, dS,
+                                        dE, dW, q0sqr, c);
     cudaDeviceSynchronize();
-    loop1.stop();
+    tl1.stop();
 
-    loop2.start();
-    doLoop2<<<bpgRows, threadsPerBlock>>>(rows, cols, J, c, iS, jE, dN, dS, dE,
-                                          dW, lambda);
+    tl2.start();
+    loop2<<<bpgRows, threadsPerBlock>>>(rows, cols, J, c, iS, jE, dN, dS, dE,
+                                        dW, lambda);
     cudaDeviceSynchronize();
-    loop2.stop();
+    tl2.stop();
   }
   iters.stop();
-  main.stop();
+  total.stop();
 
   int mismatch = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows, cols,
                         outFile, cpuRefFile, gpuRefFile);

@@ -53,11 +53,16 @@ using Microseconds = std::chrono::microseconds;
 class Timer {
 private:
   /// The name of the region with which this timer is associated (typically the
-  /// name of a kernel).
+  /// name of a kernel). The name is used when printing the timer statistics in
+  /// JSON format. Ideally, this should not have any spaces in it, but that is
+  /// not required.
   std::string mName;
 
-  /// A long name for the timer. This is used when printing the timer group in
-  /// which this timer is contained.
+  /// A long name for the timer. This is used when pretty-printing the timer
+  /// group in which this timer is contained. This is generally intended for
+  /// human consumption, so it may be more descriptive than the name. If a label
+  /// is not provided when constructing the timer, this will be the same as the
+  /// name.
   std::string mLabel;
 
   /// The time point registered when the timer was started. This will be
