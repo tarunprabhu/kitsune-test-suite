@@ -87,7 +87,7 @@ fi
 # TODO: It is not clear that we need NO_STOP_MESSAGE=1 for the Fortran tests,
 # but keep it for now. We will definitely want to revisit this at some point.
 export NO_STOP_MESSAGE=1
-# ${lit} -s -j 1 -o ${kitsune}/ts-report.json ${kitsune}
+${lit} -s -j 1 -o ${kitsune}/ts-report.json ${kitsune}
 
 # This should return a non-zero exit code if any tests failed.
 pass=$?
@@ -179,12 +179,14 @@ kitcc=$(grep "C_COMPILER:" "${test_suite}/CMakeCache.txt" |
 if [ -n "${kitcc}" ]; then
 	version=$(${kitcc} --version |
 		head -n 1 |
-		grep -oE "version [^ ]+" |
-		sed 's/version//g' |
-		tr -d ' ')
+		grep -oE "version.+$" |
+		sed 's/version[ ]*//g')
 fi
 
 platform="{
+  \"date\": \"${date}\",
+  \"version\": \"${version}\",
+  \"hostname\": \"${host}\",
   \"cpu\": {
     \"model\": \"${cpu}\",
     \"cores\": ${cores}
@@ -192,10 +194,7 @@ platform="{
   \"gpu\": {
     \"count\": ${count},
     \"devices\": \"${gpus}\"
-  },
-  \"date\": \"${date}\",
-  \"hostname\": \"${host}\",
-  \"version\": \"${version}\"
+  }
 }"
 
 echo "${platform}" >${kitsune}/platform.json

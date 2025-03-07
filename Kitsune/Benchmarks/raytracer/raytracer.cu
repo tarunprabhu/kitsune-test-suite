@@ -1,7 +1,6 @@
 // Raytracer. The output image should be a rendering of the letters LANL.
 
 #include <cmath>
-#include <cuda_runtime.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -12,8 +11,8 @@ namespace fs = std::filesystem;
 
 struct Vec {
   float x, y, z;
-  __forceinline__ __device__ Vec(float v = 0) { x = y = z = v; }
-  __forceinline__ __device__ Vec(float a, float b, float c = 0) {
+  __forceinline__ __device__ Vec(float v = 0.0f) { x = y = z = v; }
+  __forceinline__ __device__ Vec(float a, float b, float c = 0.0f) {
     x = a;
     y = b;
     z = c;
@@ -40,8 +39,7 @@ __forceinline__ __device__ float randomVal(unsigned int &x) {
   return ((x >> 16) & 0x7FFF) / (float)66635;
 }
 
-// Rectangle CSG equation. Returns minimum signed distance from
-// space carved by
+// Rectangle CSG equation. Returns minimum signed distance from space carved by
 // lowerLeft vertex and opposite rectangle vertex upperRight.
 __forceinline__ __device__ float boxTest(const Vec &position, Vec lowerLeft,
                                          Vec upperRight) {
@@ -243,72 +241,3 @@ int main(int argc, char **argv) {
                         outFile, cpuRefFile, gpuRefFile);
   return mismatch;
 }
-
-// int main(int argc, char **argv) {
-//   if (argc != 4) {
-//     std::cerr << "USAGE: raytracer <samples> <width> <height> <check-file>"
-//               << std::endl;
-//     return 1;
-//   }
-
-//   Timer main("main");
-//   unsigned int sampleCount = std::stoi(argv[1]);
-//   unsigned int imageWidth = std::stoi(argv[2]);
-//   unsigned int imageHeight = std::stoi(argv[3]);
-//   // std::string checkFile = argv[4];
-//   std::string outFile = fs::path(argv[0]).filename().string() + ".ppm";
-
-//   std::cout << "\n";
-//   std::cout << "---- Raytracer benchmark (cuda) ----\n"
-//             << "  Image size    : " << imageWidth << "x" << imageHeight <<
-//             "\n"
-//             << "  Samples/pixel : " << sampleCount << "\n\n";
-
-//   std::cout << "  Allocating image..." << std::flush;
-//   cudaError_t err = cudaSuccess;
-//   Pixel *img;
-//   size_t totalPixels = imageWidth * imageHeight;
-//   err = cudaMallocManaged(&img, totalPixels * sizeof(Pixel));
-//   if (err != cudaSuccess) {
-//     fprintf(stderr, "failed to allocate managed memory!\n");
-//     return 1;
-//   }
-//   int myGpuID;
-//   cudaGetDevice(&myGpuID);
-//   cudaMemPrefetchAsync((const void *)img, totalPixels * sizeof(Pixel),
-//   myGpuID); std::cout << "  done.\n\n";
-
-//   std::cout << "  Starting benchmark..." << std::flush;
-//   main.start();
-//   int threadsPerBlock = 256;
-//   int blocksPerGrid = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
-//   Pathtracer<<<blocksPerGrid, threadsPerBlock>>>(sampleCount, img, nullptr,
-//                                                  imageWidth, imageHeight);
-//   cudaDeviceSynchronize();
-//   uint64_t us = main.stop();
-
-//   std::cout << "done\n";
-//   std::cout << "\n\n  Total time: " << us << " us\n";
-
-//   std::cout << "  Saving image ... " << std::flush;
-//   std::ofstream imgFile(outFile);
-//   if (imgFile.is_open()) {
-//     imgFile << "P6 " << imageWidth << " " << imageHeight << " 255 ";
-//     for (int i = totalPixels - 1; i >= 0; i--)
-//       imgFile << img[i].r << img[i].g << img[i].b;
-//     imgFile.close();
-//   }
-//   std::cout << "done\n\n";
-
-//   // std::cout << "\n  Checking final result..." << std::flush;
-//   // size_t mismatch = check(outFile, checkFile);
-//   // if (mismatch)
-//   //   std::cout << "  FAIL! (Mismatch at byte " << mismatch << ")\n\n";
-//   // else
-//   //   std::cout << "  pass\n\n";
-
-//   // json(std::cout, {main});
-
-//   cudaFree(img);
-//   // return mismatch;
-// }

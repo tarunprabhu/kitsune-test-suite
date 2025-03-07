@@ -20,10 +20,10 @@ __global__ void vecadd(const ElementType *a, const ElementType *b,
 int main(int argc, char *argv[]) {
   size_t n;
   unsigned iterations;
-  unsigned threadsPerBlock;
   ElementType *a = nullptr;
   ElementType *b = nullptr;
   ElementType *c = nullptr;
+  unsigned threadsPerBlock;
 
   TimerGroup tg("vecadd");
   Timer &timer = tg.add("vecadd");
@@ -31,14 +31,12 @@ int main(int argc, char *argv[]) {
   parseCommandLineInto(argc, argv, n, iterations, &threadsPerBlock);
   header("hip", a, b, c, n);
 
-  hipDeviceProp_t devProp;
-  hipGetDeviceProperties(&devProp, 0);
   int blocksPerGrid = (n + threadsPerBlock - 1) / threadsPerBlock;
   for (unsigned t = 0; t < iterations; ++t) {
     timer.start();
     hipLaunchKernelGGL(vecadd, blocksPerGrid, threadsPerBlock, 0, 0, a, b, c,
                        n);
-    hipDeviceSynchronize();
+    (void)hipDeviceSynchronize();
     uint64_t us = timer.stop();
     std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
   }

@@ -127,8 +127,8 @@ static void dealloc(Img &img, RawImg &rawImg) {
   cudaFree(img);
   cudaFree(rawImg);
 #elif defined(IS_HIP)
-  hipFree(img);
-  hipFree(rawImg);
+  (void)hipFree(img);
+  (void)hipFree(rawImg);
 #else
   img.free();
   rawImg.free();
@@ -143,8 +143,8 @@ static void alloc(Img &img, RawImg &rawImg, unsigned imageWidth,
   cudaMallocManaged(&img, imageSize * sizeof(Pixel));
   cudaMallocManaged(&rawImg, imageSize * sizeof(Vec));
 #elif defined(IS_HIP)
-  hipMallocManaged(&img, imageSize * sizeof(Pixel));
-  hipMallocManaged(&rawImg, imageSize * sizeof(Vec));
+  (void)hipMallocManaged(&img, imageSize * sizeof(Pixel));
+  (void)hipMallocManaged(&rawImg, imageSize * sizeof(Vec));
 #else
   img.alloc(imageSize);
   rawImg.alloc(imageSize);

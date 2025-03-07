@@ -121,9 +121,9 @@ template <typename Arr> static void alloc(Arr &a, Arr &b, Arr &c, size_t n) {
   cudaMallocManaged(&b, n * sizeof(ElementType));
   cudaMallocManaged(&c, n * sizeof(ElementType));
 #elif defined(IS_HIP)
-  hipMallocManaged(&a, n * sizeof(ElementType));
-  hipMallocManaged(&b, n * sizeof(ElementType));
-  hipMallocManaged(&c, n * sizeof(ElementType));
+  (void)hipMallocManaged(&a, n * sizeof(ElementType));
+  (void)hipMallocManaged(&b, n * sizeof(ElementType));
+  (void)hipMallocManaged(&c, n * sizeof(ElementType));
 #else
   a.alloc(n);
   b.alloc(n);
@@ -154,9 +154,9 @@ template <typename Arr> static void dealloc(Arr &a, Arr &b, Arr &c) {
   cudaFree(b);
   cudaFree(c);
 #elif defined(IS_HIP)
-  hipFree(a);
-  hipFree(b);
-  hipFree(c);
+  (void)hipFree(a);
+  (void)hipFree(b);
+  (void)hipFree(c);
 #else  // CPU
   a.free();
   b.free();

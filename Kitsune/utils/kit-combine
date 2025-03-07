@@ -144,7 +144,9 @@ def process(report_file: str, build_dir: str):
         with open(platform, 'r') as f:
             combined = json.load(f)
 
+    combined['targets'] = []
     combined['tests'] = {}
+
     tts = set([])
     j = None
     with open(report_file, 'r') as f:
@@ -260,7 +262,7 @@ def main():
         build_dir = os.path.dirname(os.path.dirname(args.report))
 
     combined = process(args.report, build_dir)
-    pretty = json.dumps(combined, sort_keys=True, indent=2)
+    pretty = json.dumps(combined, sort_keys=False, indent=2)
     if args.outfile:
         with open(args.outfile, 'w') as f:
             f.write(pretty)

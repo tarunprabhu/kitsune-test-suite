@@ -1,13 +1,14 @@
 // Raytracer. The output image should be a rendering of the letters LANL.
 
-#include "hip/hip_runtime.h"
 #include <cmath>
+#include <filesystem>
 #include <fstream>
+#include <hip/hip_runtime.h>
 #include <iostream>
 
 #include "timing.h"
 
-#include "raytracer.inc"
+namespace fs = std::filesystem;
 
 struct Vec {
   float x, y, z;
@@ -30,6 +31,9 @@ struct Vec {
     return *this * (1.0 / sqrtf(*this % *this));
   }
 };
+
+#define IS_HIP
+#include "raytracer.inc"
 
 __forceinline__ __device__ float randomVal(unsigned int &x) {
   x = (214013 * x + 2531011);
@@ -181,19 +185,19 @@ __global__ void Pathtracer(int sampleCount, Pixel *img, Vec *rawImg,
     Vec color;
     for (unsigned int p = sampleCount, v = index; p--;) {
       Vec rand_left = Vec(randomVal(v), randomVal(v), randomVal(v)) * .001;
-      color =
-          color +
-          trace(position,
-                !((goal + rand_left) +
-                  left * ((x + randomVal(v)) - imgWidth / 2.0f + randomVal(v)) +
-                  up * ((y + randomVal(v)) - imgHeight / 2.0f + randomVal(v))),
-                v);
+      float xf = x + randomVal(v);
+      float yf = y + randomVal(v);
+      color = color + trace(position,
+                            !((goal + rand_left) +
+                              left * ((xf - imgWidth / 2.0f) + randomVal(v)) +
+                              up * ((yf - imgHeight / 2.0f) + randomVal(v))),
+                            v);
     }
     // Reinhard tone mapping
     color = color * (1.0f / sampleCount) + 14.0f / 241.0f;
 
     // Save the pre-quantized image.
-    rawImg[i] = color;
+    rawImg[index] = color;
 
     Vec o = color + 1.0f;
     color = Vec(color.x / o.x, color.y / o.y, color.z / o.z) * 255.0f;
@@ -214,7 +218,7 @@ int main(int argc, char **argv) {
   std::string gpuRefFile;
   Pixel *img = nullptr;
   Vec *rawImg = nullptr;
-  int threadsPerBlock;
+  unsigned threadsPerBlock;
 
   parseCommandLineInto(argc, argv, sampleCount, imageWidth, imageHeight,
                        imgFile, outFile, cpuRefFile, gpuRefFile,
@@ -223,85 +227,18 @@ int main(int argc, char **argv) {
   TimerGroup tg("raytracer");
   Timer &main = tg.add("main", "Total");
 
-  header("forall", img, rawImg, sampleCount, imageWidth, imageHeight);
+  header("hip", img, rawImg, sampleCount, imageWidth, imageHeight);
 
   main.start();
   unsigned totalPixels = imageWidth * imageHeight;
-  int blocksPerGrid = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
-  hipMemPrefetchAsync(img, totalPixels * sizeof(Pixel), 0, 0);
-  hipLaunchKernelGGL(Pathtracer, dim3(blocksPerGrid), dim3(threadsPerBlock), 0,
-                     0, sampleCount, img, rawImg, imageWidth, imageHeight);
-  hipDeviceSynchronize();
+  unsigned blocksPerGrid =
+      (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
+  hipLaunchKernelGGL(Pathtracer, blocksPerGrid, threadsPerBlock, 0, 0,
+                     sampleCount, img, rawImg, imageWidth, imageHeight);
+  (void)hipDeviceSynchronize();
   main.stop();
 
   int mismatch = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,
                         outFile, cpuRefFile, gpuRefFile);
   return mismatch;
 }
-
-// int main(int argc, char **argv) {
-//   if (argc != 5) {
-//     std::cerr << "USAGE: raytracer <samples> <width> <height> <check-file>"
-//               << std::endl;
-//     return 1;
-//   }
-
-//   Timer main("main");
-//   unsigned int sampleCount = std::stoi(argv[1]);
-//   unsigned int imageWidth = std::stoi(argv[2]);
-//   unsigned int imageHeight = std::stoi(argv[3]);
-//   std::string checkFile = argv[4];
-//   std::string outFile = fs::path(argv[0]).filename().string() + ".ppm";
-
-//   std::cout << "\n";
-//   std::cout << "---- Raytracer benchmark (forall) ----\n"
-//             << "  Image size    : " << imageWidth << "x" << imageHeight <<
-//             "\n"
-//             << "  Samples/pixel : " << sampleCount << "\n\n";
-
-//   hipDeviceProp_t devProp;
-//   hipGetDeviceProperties(&devProp, 0);
-
-//   std::cout << "  Allocating image..." << std::flush;
-//   Pixel *img;
-//   unsigned int totalPixels = imageWidth * imageHeight;
-//   HIPCHECK(hipMallocManaged(&img, totalPixels * sizeof(Pixel)));
-//   std::cout << "  done.\n\n";
-
-//   std::cout << "  Starting benchmark..." << std::flush;
-//   int threadsPerBlock = 256;
-//   int blocksPerGrid = (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
-
-//   main.start();
-//   hipMemPrefetchAsync(img, totalPixels * sizeof(Pixel), 0, 0);
-//   hipLaunchKernelGGL(Pathtracer, dim3(blocksPerGrid), dim3(threadsPerBlock),
-//   0,
-//                      0, sampleCount, img, rawImg, imageWidth, imageHeight);
-//   HIPCHECK(hipDeviceSynchronize());
-//   uint64_t us = main.stop();
-
-//   std::cout << "done\n";
-//   std::cout << "\n\n  Total time: " << us << " us\n";
-
-//   std::cout << "  Saving image ... " << std::flush;
-//   std::ofstream imgFile(outFile);
-//   if (imgFile.is_open()) {
-//     imgFile << "P6 " << imageWidth << " " << imageHeight << " 255 ";
-//     for (int i = totalPixels - 1; i >= 0; i--)
-//       imgFile << img[i].r << img[i].g << img[i].b;
-//     imgFile.close();
-//   }
-//   std::cout << "done\n\n";
-
-//   std::cout << "\n  Checking final result..." << std::flush;
-//   size_t mismatch = check(outFile, checkFile);
-//   if (mismatch)
-//     std::cout << "  FAIL! (Mismatch at byte " << mismatch << ")\n\n";
-//   else
-//     std::cout << "  pass\n\n";
-
-//   json(std::cout, {main});
-
-//   hipFree(img);
-//   return mismatch;
-// }

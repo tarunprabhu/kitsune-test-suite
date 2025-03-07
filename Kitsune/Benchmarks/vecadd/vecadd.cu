@@ -20,10 +20,10 @@ __global__ void vecadd(const ElementType *a, const ElementType *b,
 int main(int argc, char *argv[]) {
   size_t n;
   unsigned iterations;
-  unsigned threadsPerBlock;
   ElementType *a = nullptr;
   ElementType *b = nullptr;
   ElementType *c = nullptr;
+  unsigned threadsPerBlock;
 
   TimerGroup tg("vecadd");
   Timer &timer = tg.add("vecadd");

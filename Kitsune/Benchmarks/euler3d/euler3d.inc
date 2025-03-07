@@ -146,14 +146,14 @@ static void dealloc(FArr &ff_variable, FArr &areas,
   cudaFree(fluxes);
   cudaFree(step_factors);
 #elif defined(IS_HIP)
-  hipFree(ff_variable);
-  hipFree(areas);
-  hipFree(elements_surrounding_elements);
-  hipFree(normals);
-  hipFree(variables);
-  hipFree(old_variables);
-  hipFree(fluxes);
-  hipFree(step_factors);
+  (void)hipFree(ff_variable);
+  (void)hipFree(areas);
+  (void)hipFree(elements_surrounding_elements);
+  (void)hipFree(normals);
+  (void)hipFree(variables);
+  (void)hipFree(old_variables);
+  (void)hipFree(fluxes);
+  (void)hipFree(step_factors);
 #else
   ff_variable.free();
   areas.free();
@@ -184,17 +184,17 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   cudaMallocManaged(&dW, size_I * sizeof(float));
   cudaMallocManaged(&dE, size_I * sizeof(float));
 #elif defined(IS_HIP)
-  hipMallocManaged(&I, size_I * sizeof(float));
-  hipMallocManaged(&J, size_I * sizeof(float));
-  hipMallocManaged(&c, size_I * sizeof(float));
-  hipMallocManaged(&iN, rows * sizeof(int));
-  hipMallocManaged(&iS, rows * sizeof(int));
-  hipMallocManaged(&jW, cols * sizeof(int));
-  hipMallocManaged(&jE, cols * sizeof(int));
-  hipMallocManaged(&dN, size_I * sizeof(float));
-  hipMallocManaged(&dS, size_I * sizeof(float));
-  hipMallocManaged(&dW, size_I * sizeof(float));
-  hipMallocManaged(&dE, size_I * sizeof(float));
+  (void)hipMallocManaged(&I, size_I * sizeof(float));
+  (void)hipMallocManaged(&J, size_I * sizeof(float));
+  (void)hipMallocManaged(&c, size_I * sizeof(float));
+  (void)hipMallocManaged(&iN, rows * sizeof(int));
+  (void)hipMallocManaged(&iS, rows * sizeof(int));
+  (void)hipMallocManaged(&jW, cols * sizeof(int));
+  (void)hipMallocManaged(&jE, cols * sizeof(int));
+  (void)hipMallocManaged(&dN, size_I * sizeof(float));
+  (void)hipMallocManaged(&dS, size_I * sizeof(float));
+  (void)hipMallocManaged(&dW, size_I * sizeof(float));
+  (void)hipMallocManaged(&dE, size_I * sizeof(float));
 #else
   I.alloc(size_I);
   J.alloc(size_I);
@@ -235,7 +235,7 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
 #if defined(IS_CUDA)
   cudaMallocManaged(&ff_variable, NVAR * sizeof(float));
 #elif defined(IS_HIP)
-  hipMallocManaged(&ff_variable, NVAR * sizeof(float));
+  (void)hipMallocManaged(&ff_variable, NVAR * sizeof(float));
 #else
   ff_variable.alloc(NVAR);
 #endif
@@ -289,13 +289,14 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
   cudaMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
   cudaMallocManaged(&step_factors, nelr * sizeof(float));
 #elif defined(IS_HIP)
-  hipMallocManaged(&areas, nelr * sizeof(float));
-  hipMallocManaged(&elements_surrounding_elements, nelr * NNB * sizeof(int));
-  hipMallocManaged(&normals, nelr * NDIM * NNB * sizeof(float));
-  hipMallocManaged(&variables, nelr * NVAR * sizeof(float));
-  hipMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
-  hipMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
-  hipMallocManaged(&step_factors, nelr * sizeof(float));
+  (void)hipMallocManaged(&areas, nelr * sizeof(float));
+  (void)hipMallocManaged(&elements_surrounding_elements,
+                         nelr * NNB * sizeof(int));
+  (void)hipMallocManaged(&normals, nelr * NDIM * NNB * sizeof(float));
+  (void)hipMallocManaged(&variables, nelr * NVAR * sizeof(float));
+  (void)hipMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
+  (void)hipMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
+  (void)hipMallocManaged(&step_factors, nelr * sizeof(float));
 #else
   areas.alloc(nelr);
   elements_surrounding_elements.alloc(nelr * NNB);

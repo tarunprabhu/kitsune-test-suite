@@ -17,18 +17,14 @@ __global__ void copy(ElementType *dst, const ElementType *src, size_t n) {
 }
 
 int main(int argc, char *argv[]) {
-  size_t n = 0;
-  unsigned iterations = 0;
+  size_t n;
+  unsigned iterations;
   ElementType *dst = nullptr;
   ElementType *src = nullptr;
+  unsigned threadsPerBlock;
+
   TimerGroup tg("copy");
   Timer &timer = tg.add("copy");
-
-  // This is loosely for consistency with the launch parameters from kitsune.
-  unsigned threadsPerBlock = 256;
-
-  hipDeviceProp_t devProp;
-  hipGetDeviceProperties(&devProp, 0);
 
   parseCommandLineInto(argc, argv, n, iterations, &threadsPerBlock);
   header("hip", dst, src, n);
@@ -37,7 +33,7 @@ int main(int argc, char *argv[]) {
   for (unsigned t = 0; t < iterations; ++t) {
     timer.start();
     hipLaunchKernelGGL(copy, blocksPerGrid, threadsPerBlock, 0, 0, dst, src, n);
-    hipDeviceSynchronize();
+    (void)hipDeviceSynchronize();
     uint64_t us = timer.stop();
     std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
   }

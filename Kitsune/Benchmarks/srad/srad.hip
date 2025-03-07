@@ -1,5 +1,6 @@
 #include <cmath>
 #include <filesystem>
+#include <hip/hip_runtime.h>
 #include <iostream>
 #include <stdlib.h>
 
@@ -7,7 +8,7 @@
 
 namespace fs = std::filesystem;
 
-#define IS_CUDA
+#define IS_HIP
 #include "srad.inc"
 
 __global__ void initNS(int *iN, int *iS, int rows) {
@@ -113,7 +114,7 @@ int main(int argc, char *argv[]) {
   parseCommandLineInto(argc, argv, niter, rows, cols, r1, r2, c1, c2, lambda,
                        outFile, cpuRefFile, gpuRefFile, &threadsPerBlock);
 
-  header("cuda", I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, size_I, size_R, rows,
+  header("hip", I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, size_I, size_R, rows,
          cols, r1, r2, c1, c2, niter);
 
   unsigned bpgRows = (rows + threadsPerBlock - 1) / threadsPerBlock;
@@ -123,19 +124,19 @@ int main(int argc, char *argv[]) {
   main.start();
   init.start();
 
-  initNS<<<bpgRows, threadsPerBlock>>>(iN, iS, rows);
-  cudaDeviceSynchronize();
+  hipLaunchKernelGGL(initNS, bpgRows, threadsPerBlock, 0, 0, iN, iS, rows);
+  (void)hipDeviceSynchronize();
 
-  initWE<<<bpgCols, threadsPerBlock>>>(jW, jE, cols);
-  cudaDeviceSynchronize();
+  hipLaunchKernelGGL(initWE, bpgCols, threadsPerBlock, 0, 0, jW, jE, cols);
+  (void)hipDeviceSynchronize();
 
   iN[0] = 0;
   iS[rows - 1] = rows - 1;
   jW[0] = 0;
   jE[cols - 1] = cols - 1;
 
-  initJ<<<bpgSize, threadsPerBlock>>>(J, I, size_I);
-  cudaDeviceSynchronize();
+  hipLaunchKernelGGL(initJ, bpgSize, threadsPerBlock, 0, 0, J, I, size_I);
+  (void)hipDeviceSynchronize();
 
   init.stop();
 
@@ -155,15 +156,15 @@ int main(int argc, char *argv[]) {
     q0sqr = varROI / (meanROI * meanROI);
 
     loop1.start();
-    doLoop1<<<bpgRows, threadsPerBlock>>>(rows, cols, J, iN, iS, jE, jW, dN, dS,
-                                          dE, dW, q0sqr, c);
-    cudaDeviceSynchronize();
+    hipLaunchKernelGGL(doLoop1, bpgRows, threadsPerBlock, 0, 0, rows, cols, J,
+                       iN, iS, jE, jW, dN, dS, dE, dW, q0sqr, c);
+    (void)hipDeviceSynchronize();
     loop1.stop();
 
     loop2.start();
-    doLoop2<<<bpgRows, threadsPerBlock>>>(rows, cols, J, c, iS, jE, dN, dS, dE,
-                                          dW, lambda);
-    cudaDeviceSynchronize();
+    hipLaunchKernelGGL(doLoop2, bpgRows, threadsPerBlock, 0, 0, rows, cols, J,
+                       c, iS, jE, dN, dS, dE, dW, lambda);
+    (void)hipDeviceSynchronize();
     loop2.stop();
   }
   iters.stop();

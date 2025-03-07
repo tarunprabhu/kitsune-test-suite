@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
   unsigned threadsPerBlock;
   ElementType *x = nullptr;
   ElementType *y = nullptr;
-  ElementType *z = nullptr;
+  ElementType *r = nullptr;
 
   TimerGroup tg("saxpy");
   Timer &init = tg.add("init");
@@ -45,21 +45,19 @@ int main(int argc, char *argv[]) {
   parseCommandLineInto(argc, argv, n, iterations, &threadsPerBlock);
   header("hip", DEFAULT_A_VALUE, x, y, r, n);
 
-  hipDeviceProp_t devProp;
-  hipGetDeviceProperties(&devProp, 0);
   int blocksPerGrid = (n + threadsPerBlock - 1) / threadsPerBlock;
   for (unsigned t = 0; t < iterations; ++t) {
     init.start();
     hipLaunchKernelGGL(doInit, blocksPerGrid, threadsPerBlock, 0, 0,
                        DEFAULT_X_VALUE, DEFAULT_Y_VALUE, x, y, n);
-    hipDeviceSynchronize();
+    (void)hipDeviceSynchronize();
     uint64_t usInit = init.stop();
 
     saxpy.start();
     hipLaunchKernelGGL(doSaxpy, blocksPerGrid, threadsPerBlock, 0, 0,
                        DEFAULT_A_VALUE, x, y, r, n);
-    hipDeviceSynchronize();
-    uint64_t us = saxpy.stop();
+    (void)hipDeviceSynchronize();
+    uint64_t usSaxpy = saxpy.stop();
     std::cout << "\t" << t
               << ". iteration time: " << Timer::secs(usInit + usSaxpy) << "\n";
   }

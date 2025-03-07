@@ -94,7 +94,7 @@ template <typename Arr> static void randomFill(Arr &arr, size_t n) {
   for (size_t i = 0; i < n; ++i) {
     ElementType r1 = rand();
     ElementType r2 = rand();
-    arr[i] = (r1 / RAND_MAX) * r2;
+    arr[i] = (r1 / float(RAND_MAX)) * r2;
   }
 }
 
@@ -120,8 +120,8 @@ template <typename Arr> static void alloc(Arr &dst, Arr &src, size_t n) {
   cudaMallocManaged(&dst, n * sizeof(ElementType));
   cudaMallocManaged(&src, n * sizeof(ElementType));
 #elif defined(IS_HIP)
-  hipMallocManaged(&dst, n * sizeof(ElementType));
-  hipMallocManaged(&src, n * sizeof(ElementType));
+  (void)hipMallocManaged(&dst, n * sizeof(ElementType));
+  (void)hipMallocManaged(&src, n * sizeof(ElementType));
 #else
   dst.alloc(n);
   src.alloc(n);
@@ -149,8 +149,8 @@ template <typename Arr> static void dealloc(Arr &dst, Arr &src) {
   cudaFree(dst);
   cudaFree(src);
 #elif defined(IS_HIP)
-  hipFree(dst);
-  hipFree(src);
+  (void)hipFree(dst);
+  (void)hipFree(src);
 #else  // CPU
   dst.free();
   src.free();

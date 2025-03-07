@@ -3,6 +3,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <hip/hip_runtime.h>
 #include <iostream>
 #include <string>
 
@@ -10,7 +11,7 @@
 
 namespace fs = std::filesystem;
 
-#define IS_CUDA
+#define IS_HIP
 #include "euler3d.inc"
 
 __global__ void cpy(float *dst, const float *src, int n) {
@@ -368,36 +369,39 @@ int main(int argc, char *argv[]) {
   // Create arrays and set initial conditions
   main.start();
   init.start();
-  initialize_variables<<<bpgNelrAll, threadsPerBlock>>>(nelr, variables,
-                                                        ff_variable);
-  cudaDeviceSynchronize();
+  hipLaunchKernelGGL(initialize_variables, bpgNelrAll, threadsPerBlock, 0, 0,
+                     nelr, variables, ff_variable);
+  (void)hipDeviceSynchronize();
   init.stop();
 
   // Begin iterations
   iters.start();
   for (int i = 0; i < iterations; i++) {
     copy.start();
-    cpy(old_variables, variables, nelr * NVAR);
+    hipLaunchKernelGGL(cpy, bpgNelrNvar, threadsPerBlock, 0, 0, old_variables,
+                       variables, nelr * NVAR);
+    (void)hipDeviceSynchronize();
     copy.stop();
 
     // for the first iteration we compute the time step
     sf.start();
-    compute_step_factor<<<bpgNelr, threadsPerBlock>>>(nelr, variables, areas,
-                                                      step_factors);
-    cudaDeviceSynchronize();
+    hipLaunchKernelGGL(compute_step_factor, bpgNelr, threadsPerBlock, 0, 0,
+                       nelr, variables, areas, step_factors);
+    (void)hipDeviceSynchronize();
     sf.stop();
 
     rk.start();
     for (int j = 0; j < RK; j++) {
-      compute_flux<<<bpgNelr, threadsPerBlock>>>(
-          nelr, elements_surrounding_elements, normals, variables, fluxes,
-          ff_variable, ff_flux_contribution_momentum_x,
-          ff_flux_contribution_momentum_y, ff_flux_contribution_momentum_z,
-          ff_flux_contribution_density_energy);
-      cudaDeviceSynchronize();
-      time_step<<<bpgNelr, threadsPerBlock>>>(j, nelr, old_variables, variables,
-                                              step_factors, fluxes);
-      cudaDeviceSynchronize();
+      hipLaunchKernelGGL(compute_flux, bpgNelr, threadsPerBlock, 0, 0, nelr,
+                         elements_surrounding_elements, normals, variables,
+                         fluxes, ff_variable, ff_flux_contribution_momentum_x,
+                         ff_flux_contribution_momentum_y,
+                         ff_flux_contribution_momentum_z,
+                         ff_flux_contribution_density_energy);
+      (void)hipDeviceSynchronize();
+      hipLaunchKernelGGL(time_step, bpgNelr, threadsPerBlock, 0, 0, j, nelr,
+                         old_variables, variables, step_factors, fluxes);
+      (void)hipDeviceSynchronize();
     }
     rk.stop();
   }

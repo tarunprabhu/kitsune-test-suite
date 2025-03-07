@@ -167,17 +167,17 @@ static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   cudaFree(dW);
   cudaFree(dE);
 #elif defined(IS_HIP)
-  hipFree(I);
-  hipFree(J);
-  hipFree(c);
-  hipFree(iN);
-  hipFree(iS);
-  hipFree(jW);
-  hipFree(jE);
-  hipFree(dN);
-  hipFree(dS);
-  hipFree(dW);
-  hipFree(dE);
+  (void)hipFree(I);
+  (void)hipFree(J);
+  (void)hipFree(c);
+  (void)hipFree(iN);
+  (void)hipFree(iS);
+  (void)hipFree(jW);
+  (void)hipFree(jE);
+  (void)hipFree(dN);
+  (void)hipFree(dS);
+  (void)hipFree(dW);
+  (void)hipFree(dE);
 #else
   I.free();
   J.free();
@@ -211,17 +211,17 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   cudaMallocManaged(&dW, size_I * sizeof(float));
   cudaMallocManaged(&dE, size_I * sizeof(float));
 #elif defined(IS_HIP)
-  hipMallocManaged(&I, size_I * sizeof(float));
-  hipMallocManaged(&J, size_I * sizeof(float));
-  hipMallocManaged(&c, size_I * sizeof(float));
-  hipMallocManaged(&iN, rows * sizeof(int));
-  hipMallocManaged(&iS, rows * sizeof(int));
-  hipMallocManaged(&jW, cols * sizeof(int));
-  hipMallocManaged(&jE, cols * sizeof(int));
-  hipMallocManaged(&dN, size_I * sizeof(float));
-  hipMallocManaged(&dS, size_I * sizeof(float));
-  hipMallocManaged(&dW, size_I * sizeof(float));
-  hipMallocManaged(&dE, size_I * sizeof(float));
+  (void)hipMallocManaged(&I, size_I * sizeof(float));
+  (void)hipMallocManaged(&J, size_I * sizeof(float));
+  (void)hipMallocManaged(&c, size_I * sizeof(float));
+  (void)hipMallocManaged(&iN, rows * sizeof(int));
+  (void)hipMallocManaged(&iS, rows * sizeof(int));
+  (void)hipMallocManaged(&jW, cols * sizeof(int));
+  (void)hipMallocManaged(&jE, cols * sizeof(int));
+  (void)hipMallocManaged(&dN, size_I * sizeof(float));
+  (void)hipMallocManaged(&dS, size_I * sizeof(float));
+  (void)hipMallocManaged(&dW, size_I * sizeof(float));
+  (void)hipMallocManaged(&dE, size_I * sizeof(float));
 #else
   I.alloc(size_I);
   J.alloc(size_I);

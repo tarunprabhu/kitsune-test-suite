@@ -17,15 +17,14 @@ __global__ void copy(ElementType *dst, const ElementType *src, size_t n) {
 }
 
 int main(int argc, char *argv[]) {
-  size_t n = 0;
-  unsigned iterations = 0;
+  size_t n;
+  unsigned iterations;
   ElementType *dst = nullptr;
   ElementType *src = nullptr;
+  unsigned threadsPerBlock;
+
   TimerGroup tg("copy");
   Timer &timer = tg.add("copy");
-
-  // This is loosely for consistency with the launch parameters from kitsune.
-  unsigned threadsPerBlock = 256;
 
   parseCommandLineInto(argc, argv, n, iterations, &threadsPerBlock);
   header("cuda", dst, src, n);
