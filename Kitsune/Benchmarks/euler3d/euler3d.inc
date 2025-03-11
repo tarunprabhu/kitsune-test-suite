@@ -15,30 +15,7 @@ extern int optind, opterr, optopt;
 } // extern "C"
 #endif // __cplusplus
 
-struct Float3 {
-  float x, y, z;
-};
-
-#define block_length 1
-
-/*
- * Options
- *
- */
-#define GAMMA 1.4
-#define NDIM 3
-#define NNB 4
-#define RK 3 // 3rd order RK
-#define ff_mach 1.2
-#define deg_angle_of_attack 0.0f
-
-/*
- * not options
- */
-#define VAR_DENSITY 0
-#define VAR_MOMENTUM 1
-#define VAR_DENSITY_ENERGY (VAR_MOMENTUM + NDIM)
-#define NVAR (VAR_DENSITY_ENERGY + 1)
+#include "common.h"
 
 static const char *usage = "euler3d [OPTIONS] <domain> [iters]\n"
                            "Try `euler3d -h` for more information";

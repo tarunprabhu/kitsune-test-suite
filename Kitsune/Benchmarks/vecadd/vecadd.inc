@@ -15,6 +15,8 @@ extern int optind, opterr, optopt;
 } // extern "C"
 #endif // __cplusplus
 
+#include "types.h"
+
 static const char *usage = "vecadd [OPTIONS] [n] [iterations]\n"
                            "Try `vecadd -h` for more information";
 
@@ -89,8 +91,6 @@ static void parseCommandLineInto(int argc, char *argv[], size_t &n,
     exit(1);
   }
 }
-
-using ElementType = float;
 
 template <typename Arr> static void randomFill(Arr &arr, size_t n, bool small) {
   for (size_t i = 0; i < n; ++i) {

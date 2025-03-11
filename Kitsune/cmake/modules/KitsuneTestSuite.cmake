@@ -51,18 +51,16 @@ endfunction ()
 
 # Register the target as a test.
 #
-#     target
+#     target         The cmake target
 #     tapir_target   The tapir target. A value of "none" is a special case. It
 #                    will be treated as "not to be built with any tapir target"
 #     cmdargs        A list of command line arguments to be passed when running
 #                    the test
-#     data           A list of files containing that will be used by the test.
-#                    These will be copied into the build directory.
 #
-function (register_test target tapir_target cmdargs data)
+function (register_test target tapir_target cmdargs)
   llvm_test_executable_no_test(${target} ${source})
   llvm_test_run(WORKDIR "%S" "${cmdargs}")
-  llvm_test_data(${target} ${data})
+
   # timeit adds --append-exitstatus to the test output. We expect that the tests
   # will perform their own verification and return 0 on success, non-zero on
   # failure. Since we don't support Windows, we should have grep.
@@ -77,32 +75,38 @@ function (register_test target tapir_target cmdargs data)
   target_include_directories(${target} PUBLIC
     ${CMAKE_SOURCE_DIR}/Kitsune/include)
 
-  # We need to set the tapir flags on the link options, otherwise the runtime
-  # libraries (kitrt, opencilk etc.) will not be linked in correctly.
-  set(tapir_flags "--tapir=${tapir_target}")
   if (NOT tapir_target STREQUAL "none")
+    set(tapir_flags "--tapir=${tapir_target}")
+    if (tapir_target STREQUAL "cuda" AND NOT KITSUNE_CUDA_ARCH STREQUAL "")
+      list(APPEND tapir_flags "--tapir-cuda-arch=${KITSUNE_CUDA_ARCH}")
+    endif ()
+    if (tapir_target STREQUAL "hip" AND NOT KITSUNE_HIP_ARCH STREQUAL "")
+      list(APPEND tapir_flags "--tapir-hip-arch=${KITSUNE_HIP_ARCH}")
+    endif ()
+
+    # We need to set the tapir flags on the link options, otherwise the runtime
+    # libraries (kitrt, opencilk etc.) will not be linked in correctly.
     target_compile_options(${target} BEFORE PUBLIC "${tapir_flags}")
     target_link_options(${target} BEFORE PUBLIC "${tapir_flags}")
   endif ()
-
-  # We need this only because Kitsune cannot currently automatically detect the
-  # architecture of the GPU for which we are compiling. When we can do this
-  # automatically, or if we resort to creating a multi-target fat binary with
-  # a range of architectures supported, this should go away.
-  if (tapir_target STREQUAL "cuda" AND NOT KITSUNE_CUDA_ARCH STREQUAL "")
-    # FIXME: Currently, --tapir-cuda-arch is not wired up, so we must use
-    # -mllvm cuabi-arch to set the correct value in the 'cuda' tapir target.
-    target_compile_options(${target} PUBLIC
-      -mllvm -cuabi-arch=${KITSUNE_CUDA_ARCH})
-  endif ()
-
-  if (tapir_target STREQUAL "hip" AND NOT KITSUNE_HIP_ARCH STREQUAL "")
-    # FIXME: Currently, --tapir-hip-arch is not wired up, so we must use
-    # -mllvm hipabi-arch to set the correct value in the 'hip' tapir target.
-    target_compile_options(${target} PUBLIC
-      -mllvm -hipabi-arch=${KITSUNE_HIP_ARCH})
-  endif ()
 endfunction ()
+
+# "Copy" the data files to the current build directory. For now, this does not
+# actually copy, but simply creates a symlink to the files which are all assumed
+# to be in the current source directory.
+function (setup_data data)
+  # These should really be a POST_BUILD command for some target, but it's not
+  # clear that it's worth the trouble since each source file could match to a
+  # number of cmake targets depending on which tapir targets have been enabled.
+  # There is also no single target that is guaranteed to always be built. So
+  # just do this at configure time instead.
+  foreach (file IN LISTS data)
+    file(CREATE_LINK
+      ${CMAKE_CURRENT_SOURCE_DIR}/${file}
+      ${CMAKE_CURRENT_BINARY_DIR}/${file}
+      SYMBOLIC)
+  endforeach ()
+endfunction()
 
 # Setup a single-source test for the given tapir target.
 #
@@ -112,10 +116,8 @@ endfunction ()
 #                    will be treated as "not to be built with any tapir target"
 #     cmdargs        A list of command line arguments to be passed when running
 #                    the test
-#     data           A list of files containing that will be used by the test.
-#                    These will be copied into the build directory.
 #
-function (kit_singlesource_test source lang tapir_target cmdargs data)
+function (kit_singlesource_test source lang tapir_target cmdargs)
   get_filename_component(base "${source}" NAME_WLE)
   string(REPLACE "." "-" base "${base}")
   if (tapir_target STREQUAL "none")
@@ -130,7 +132,7 @@ function (kit_singlesource_test source lang tapir_target cmdargs data)
     set(target "${base}-${tapir_target}")
   endif ()
 
-  register_test("${target}" "${tapir_target}" "${cmdargs}" "${data}")
+  register_test("${target}" "${tapir_target}" "${cmdargs}")
 
   # Since we do not support cross compiling, or portability across GPUs, just
   # compile the vanilla cuda code for the current GPU. If this is not done, it
@@ -157,8 +159,11 @@ endfunction()
 #     lang       The source language
 #     cmdargs    A list of command line arguments to be passed when running the
 #                test
-#     data       A list of files containing that will be used by the test. These
-#                will be copied into the build directory.
+#     data       A list of files containing that will be used by the test. A
+#                symlink to these will be created in the build directory. In
+#                general, the LLVM test suite is intended to be built without
+#                any dependence on the source directory, but we don't really
+#                care about this.
 #
 function(kit_singlesource_all_targets source lang cmdargs data)
   if (TEST_CUDA_TARGET)
@@ -188,6 +193,7 @@ function(kit_singlesource_all_targets source lang cmdargs data)
   if (TEST_SERIAL_TARGET)
     kit_singlesource_test(${source} ${lang} "serial" "${cmdargs}" "${data}")
   endif ()
+  setup_data("${data}")
 endfunction()
 
 # Configure the current directory as a SingleSource subdirectory - i.e. every
@@ -316,22 +322,15 @@ macro(make_target base type tapir_target kokkos out)
     ${CMAKE_SOURCE_DIR}/Kitsune/include)
 
   set(tapir_flags "--tapir=${tapir_target}")
-  target_compile_options(${target} BEFORE PUBLIC -flto ${tapir_flags})
-  target_link_options(${target} PUBLIC ${tapir_flags} -flto)
-
-  # We need this only because Kitsune cannot currently automatically detect the
-  # architecture of the GPU for which we are compiling. When we can do this
-  # automatically, or if we resort to creating a multi-target fat binary with
-  # a range of architectures supported, this should go away.
   if (${tapir_target} STREQUAL "cuda" AND NOT KITSUNE_CUDA_ARCH STREQUAL "")
-    target_link_options(${target} PUBLIC
-      -Wl,-plugin-opt=--cuabi-arch=${KITSUNE_CUDA_ARCH})
+    list(APPEND tapir_flags "--tapir-cuda-arch=${KITSUNE_CUDA_ARCH}")
+  endif ()
+  if (${tapir_target} STREQUAL "hip" AND NOT KITSUNE_HIP_ARCH STREQUAL "")
+    list(APPEND tapir_flags "--tapir-hip-arch=${KITSUNE_HIP_ARCH}")
   endif ()
 
-  if (${tapir_target} STREQUAL "hip" AND NOT KITSUNE_HIP_ARCH STREQUAL "")
-    target_link_options(${target} PUBLIC
-      -Wl,-plugin-opt=--hipabi-arch=${KITSUNE_HIP_ARCH})
-  endif ()
+  target_compile_options(${target} BEFORE PUBLIC -flto ${tapir_flags})
+  target_link_options(${target} PUBLIC -flto ${tapir_flags})
 
   if (kokkos)
     target_compile_options(${target} BEFORE PUBLIC -fkokkos -fkokkos-no-init)
@@ -442,5 +441,6 @@ function (kitsune_multisource base out)
     endif ()
   endif ()
 
+  setup_data("${data}")
   set(${out} ${targets} PARENT_SCOPE)
 endfunction ()

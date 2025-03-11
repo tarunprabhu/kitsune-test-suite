@@ -30,7 +30,7 @@ static void initialize_variables(int nelr, mobile_ptr<float> variables,
   }
 }
 
-inline __attribute__((always_inline)) static void compute_flux_contribution(
+static void compute_flux_contribution(
     const float density, const Float3 &momentum, const float density_energy,
     const float pressure, Float3 &velocity, Float3 &fc_momentum_x,
     Float3 &fc_momentum_y, Float3 &fc_momentum_z, Float3 &fc_density_energy) {
@@ -52,27 +52,25 @@ inline __attribute__((always_inline)) static void compute_flux_contribution(
   fc_density_energy.z = velocity.z * de_p;
 }
 
-inline __attribute__((always_inline)) static void
-compute_velocity(float density, const Float3 &momentum, Float3 &velocity) {
+static void compute_velocity(float density, const Float3 &momentum,
+                             Float3 &velocity) {
   velocity.x = momentum.x / density;
   velocity.y = momentum.y / density;
   velocity.z = momentum.z / density;
 }
 
-inline __attribute__((always_inline)) static float
-compute_speed_sqd(const Float3 &velocity) {
+static float compute_speed_sqd(const Float3 &velocity) {
   return velocity.x * velocity.x + velocity.y * velocity.y +
          velocity.z * velocity.z;
 }
 
-inline __attribute__((always_inline)) static float
-compute_pressure(float density, float density_energy, float speed_sqd) {
+static float compute_pressure(float density, float density_energy,
+                              float speed_sqd) {
   return (float(GAMMA) - float(1.0f)) *
          (density_energy - float(0.5f) * density * speed_sqd);
 }
 
-inline __attribute__((always_inline)) static float
-compute_speed_of_sound(float density, float pressure) {
+static float compute_speed_of_sound(float density, float pressure) {
   return sqrtf(float(GAMMA) * pressure / density);
 }
 
