@@ -17,4 +17,5 @@ foreach (target IN LISTS targets)
     main.cpp
     time_step.cpp
     utils.cpp)
+  target_compile_options(${target} PUBLIC ${KITSUNE_CXX_FLAGS})
 endforeach ()

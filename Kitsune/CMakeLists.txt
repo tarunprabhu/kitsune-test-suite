@@ -7,25 +7,23 @@
 # after querying the kitsune installation using the kit-config utility.
 project(kitsune-test-suite)
 
-set(KITSUNE_C "kitcc")
-set(KITSUNE_CXX "kit++")
-set(KITSUNE_Fortran "kitfc")
+# The list of languages here must be kept in sync with that known to Kitsune
+set(KITSUNE_TEST_LANGS "" CACHE STRING
+  "A semicolon-separated list of languages to test. If this is not set, all \
+the languages for which frontends have been built will be tested. The \
+currently known languages are: c cxx fortran")
 
-set(KITSUNE_TEST_FRONTENDS "" CACHE STRING
-  "The Kitsune frontends to test. If this is not set, all the built Kitsune \
-frontends will be tested")
-
-set(KITSUNE_SKIP_FRONTENDS "" CACHE STRING
-  "The Kitsune frontends to skip")
+set(KITSUNE_SKIP_LANGS "" CACHE STRING
+  "A semicolon-separated list of languages to skip")
 
 set(KITSUNE_TEST_TAPIR_TARGETS "" CACHE STRING
-  "The tapir targets to test. If this is not set, all Tapir targets enabled in \
-Kitsune will be tested. Each element of this list must be a value that can be \
-passed to the -ftapir= option of the frontend")
+  "A semicolon-separated list of tapir targets to test. If this is not set, \
+all tapir targets enabled in Kitsune will be tested. Each element of this list \
+must be a value that can be passed to the --tapir= option of the frontend")
 
 set(KITSUNE_SKIP_TAPIR_TARGETS "" CACHE STRING
-  "The list of tapir targets to skip. Each element of this list must be a \
-value that can be passed to the -ftapir= option of the frontend")
+  "A semicolon-separated list of tapir targets to skip. Each element of this \
+list must be a value that can be passed to the --tapir= option of the frontend")
 
 set(KITSUNE_CUDA_ARCH "" CACHE STRING
   "Kitsune can only compile for a single GPU, and must be given the GPU \
@@ -58,7 +56,7 @@ option(KITSUNE_BENCHMARK
 are intended to be used for both correctness testing and performance. Setting \
 this option will result in the non-kitsune single-source tests (.cu, .hip \
 etc.) being built and run. This will only run a subset of the tests that are \
-intended as benchmarks. NOTE: This will skip some correctness checks"
+intended as benchmarks. NOTE: This may skip some correctness checks"
   OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
@@ -69,7 +67,7 @@ set(TEST_CUDA_LANG OFF)
 # Build and run the vanilla hip (.hip) tests
 set(TEST_HIP_LANG OFF)
 
-# Build and run the Kokkos tests with a vanilla (non-Kitsune) compiler
+# Build and run the Kokkos tests with a vanilla (non-Kitsune) compiler.
 set(TEST_KOKKOS_LANG OFF)
 
 # Build and run the Fortran tests with a vanilla (non-Kitsune) compiler
@@ -139,18 +137,21 @@ if (KITCC STREQUAL "")
   set(TEST_C OFF)
 elseif (NOT KITCC STREQUAL CMAKE_C_COMPILER)
   message(FATAL_ERROR "C compiler is not Kitsune [${CMAKE_C_COMPILER}]")
-elseif (NOT KITSUNE_TEST_FRONTENDS STREQUAL "")
-  if (NOT KITSUNE_C IN_LIST KITSUNE_TEST_FRONTENDS)
+elseif (NOT KITSUNE_TEST_LANGS STREQUAL "")
+  if (NOT "c" IN_LIST KITSUNE_TEST_LANGS)
     set(TEST_C OFF)
   endif ()
-elseif (KITSUNE_C IN_LIST KITSUNE_SKIP_FRONTENDS)
+elseif ("c" IN_LIST KITSUNE_SKIP_LANGS)
   set(TEST_C OFF)
 else ()
   set(TEST_C ON)
-  set(KITSUNE_C_FLAGS "${CMAKE_C_FLAGS} \
-${CMAKE_C_FLAGS_${BUILD_CONFIG}} \
-${KITSUNE_FLAGS_EXTRA} \
-${KITSUNE_C_FLAGS_EXTRA}")
+  set(KITSUNE_C_FLAGS
+    ${CMAKE_C_FLAGS}
+    ${CMAKE_C_FLAGS_${BUILD_CONFIG}}
+    ${KITSUNE_FLAGS_EXTRA}
+    ${KITSUNE_C_FLAGS_EXTRA})
+  string(STRIP "${KITSUNE_C_FLAGS}" KITSUNE_C_FLAGS)
+  string(REPLACE " " ";" KITSUNE_C_FLAGS "${KITSUNE_C_FLAGS}")
   message(STATUS "C compiler options: ${KITSUNE_C_FLAGS}")
 endif ()
 if (TEST_C)
@@ -159,13 +160,12 @@ if (TEST_C)
   find_program(CLANG clang REQUIRED
     PATHS ${COMPILER_BINDIR}
     NO_DEFAULT_PATH)
-
-  message(STATUS "Testing frontend: ${KITSUNE_C}")
+  message(STATUS "Testing language: C")
 endif ()
 
 # Check that ${CMAKE_CXX_COMPILER} is the same as the C++ frontend returned by
 # kit-config
-execute_process(COMMAND "${KIT_CONFIG}" --c++-frontend
+execute_process(COMMAND "${KIT_CONFIG}" --cxx-frontend
   OUTPUT_VARIABLE KITXX
   OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
@@ -173,18 +173,21 @@ if (KITXX STREQUAL "")
   set(TEST_CXX OFF)
 elseif (NOT KITXX STREQUAL CMAKE_CXX_COMPILER)
   message(FATAL_ERROR "C++ compiler is not Kitsune [${CMAKE_CXX_COMPILER}]")
-elseif (NOT KITSUNE_TEST_FRONTENDS STREQUAL "")
-  if (NOT KITSUNE_CXX IN_LIST KITSUNE_TEST_FRONTENDS)
+elseif (NOT KITSUNE_TEST_LANGS STREQUAL "")
+  if (NOT "cxx" IN_LIST KITSUNE_TEST_LANGS)
     set(TEST_CXX OFF)
   endif ()
-elseif (KITSUNE_CXX IN_LIST KITSUNE_SKIP_FRONTENDS)
+elseif ("cxx" IN_LIST KITSUNE_SKIP_LANGS)
   set(TEST_CXX OFF)
 else ()
   set(TEST_CXX ON)
-  set(KITSUNE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
-${CMAKE_CXX_FLAGS_${BUILD_CONFIG}} \
-${KITSUNE_FLAGS_EXTRA} \
-${KITSUNE_CXX_FLAGS_EXTRA}")
+  set(KITSUNE_CXX_FLAGS
+    ${CMAKE_CXX_FLAGS}
+    ${CMAKE_CXX_FLAGS_${BUILD_CONFIG}}
+    ${KITSUNE_FLAGS_EXTRA}
+    ${KITSUNE_CXX_FLAGS_EXTRA})
+  string(STRIP "${KITSUNE_CXX_FLAGS}" KITSUNE_CXX_FLAGS)
+  string(REPLACE " " ";" KITSUNE_CXX_FLAGS "${KITSUNE_CXX_FLAGS}")
   message(STATUS "C++ compiler options: ${KITSUNE_CXX_FLAGS}")
 endif ()
 if (TEST_CXX)
@@ -193,8 +196,7 @@ if (TEST_CXX)
   find_program(CLANGXX clang++ REQUIRED
     PATHS ${COMPILER_BINDIR}
     NO_DEFAULT_PATH)
-
-  message(STATUS "Testing frontend: ${KITSUNE_CXX}")
+  message(STATUS "Testing langauge: C++")
 endif ()
 
 # Check that ${CMAKE_Fortran_COMPILER} is the same as the Fortran frontend
@@ -207,21 +209,24 @@ if (KITFC STREQUAL "")
   set(TEST_Fortran OFF)
 elseif (NOT KITFC STREQUAL CMAKE_Fortran_COMPILER)
   message(FATAL_ERROR "Fortran compiler is not Kitsune [${CMAKE_Fortran_COMPILER}]")
-elseif (NOT KITSUNE_TEST_FRONTENDS STREQUAL "")
-  if (NOT KITSUNE_Fortran IN_LIST KITSUNE_TEST_FRONTENDS)
+elseif (NOT KITSUNE_TEST_LANGS STREQUAL "")
+  if (NOT "fortran" IN_LIST KITSUNE_TEST_LANGS)
     set(TEST_Fortran OFF)
   endif ()
-elseif (KITSUNE_Fortran IN_LIST KITSUNE_SKIP_FRONTENDS)
+elseif ("fortran" IN_LIST KITSUNE_SKIP_LANGS)
   set(TEST_Fortran OFF)
 else ()
   set(TEST_Fortran ON)
   # The Fortran language may not have been enabled if TEST_SUITE_FORTRAN was not
   # set.
   enable_language(Fortran)
-  set(KITSUNE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} \
-${CMAKE_Fortran_FLAGS_${BUILD_CONFIG}} \
-${KITSUNE_FLAGS_EXTRA} \
-${KITSUNE_Fortran_FLAGS_EXTRA}")
+  set(KITSUNE_Fortran_FLAGS
+    ${CMAKE_Fortran_FLAGS}
+    ${CMAKE_Fortran_FLAGS_${BUILD_CONFIG}}
+    ${KITSUNE_FLAGS_EXTRA}
+    ${KITSUNE_Fortran_FLAGS_EXTRA})
+  string(STRIP "${KITSUNE_Fortran_FLAGS}" KITSUNE_Fortran_FLAGS)
+  string(REPLACE " " ";" KITSUNE_Fortran_FLAGS "${KITSUNE_Fortran_FLAGS}")
   message(STATUS "Fortran compiler options: ${KITSUNE_Fortran_FLAGS}")
 endif ()
 if (TEST_Fortran)
@@ -231,44 +236,44 @@ if (TEST_Fortran)
     PATHS ${COMPILER_BINDIR}
     NO_DEFAULT_PATH)
 
-  message(STATUS "Testing frontend: ${KITSUNE_Fortran}")
+  message(STATUS "Testing language: Fortran")
 endif ()
 
-# Sanity check the inputs to KITSUNE_TEST_FRONTENDS and KITSUNE_SKIP_FRONTENDS
-execute_process(COMMAND "${KIT_CONFIG}" --all-frontends
-  OUTPUT_VARIABLE ALL_FRONTENDS_STR
+# Sanity check the inputs to KITSUNE_TEST_LANGS and KITSUNE_SKIP_LANGS
+execute_process(COMMAND "${KIT_CONFIG}" --known-langs
+  OUTPUT_VARIABLE KNOWN_LANGS_STR
   OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
-string(REPLACE " " ";" ALL_FRONTENDS "${ALL_FRONTENDS_STR}")
+string(REPLACE " " ";" KNOWN_LANGS "${KNOWN_LANGS_STR}")
 
-foreach (FRONTEND ${KITSUNE_TEST_FRONTENDS})
-  if (NOT FRONTEND IN_LIST ALL_FRONTENDS)
-    message(FATAL_ERROR "Unknown frontend: ${FRONTEND}")
+foreach (LANG ${KITSUNE_TEST_LANGS})
+  if (NOT LANG IN_LIST KNOWN_LANGS)
+    message(FATAL_ERROR "Unsupported language: ${LANG}")
   endif ()
 endforeach ()
 
-foreach (FRONTEND ${KITSUNE_SKIP_FRONTENDS})
-  if (NOT FRONTEND IN_LIST ALL_FRONTENDS)
-    message(FATAL_ERROR "Unknown frontend: ${FRONTEND}")
+foreach (LANG ${KITSUNE_SKIP_LANGS})
+  if (NOT LANG IN_LIST KNOWN_LANGS)
+    message(FATAL_ERROR "Unknown language: ${LANG}")
   endif ()
 endforeach ()
 
 # Sanity check the inputs to KITSUNE_TEST_TAPIR_TARGETS and
 # KITSUNE_SKIP_TAPIR_TARGETS
-execute_process(COMMAND "${KIT_CONFIG}" --all-tapir-targets
-  OUTPUT_VARIABLE ALL_TAPIR_TARGETS_STR
+execute_process(COMMAND "${KIT_CONFIG}" --known-tapir-targets
+  OUTPUT_VARIABLE KNOWN_TAPIR_TARGETS_STR
   OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
-string(REPLACE " " ";" ALL_TAPIR_TARGETS "${ALL_TAPIR_TARGETS_STR}")
+string(REPLACE " " ";" KNOWN_TAPIR_TARGETS "${KNOWN_TAPIR_TARGETS_STR}")
 
 foreach (TAPIR_TARGET ${KITSUNE_TEST_TAPIR_TARGETS})
-  if (NOT ${TAPIR_TARGET} IN_LIST ALL_TAPIR_TARGETS)
+  if (NOT ${TAPIR_TARGET} IN_LIST KNOWN_TAPIR_TARGETS)
     message(FATAL_ERROR "Unknown tapir target: ${TAPIR_TARGET}")
   endif ()
 endforeach ()
 
 foreach (TAPIR_TARGET ${KITSUNE_SKIP_TAPIR_TARGETS})
-  if (NOT ${TAPIR_TARGET} IN_LIST ALL_TAPIR_TARGETS)
+  if (NOT ${TAPIR_TARGET} IN_LIST KNOWN_TAPIR_TARGETS)
     message(FATAL_ERROR "Unknown tapir target: ${TAPIR_TARGET}")
   endif ()
 endforeach ()
@@ -385,7 +390,7 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
 endforeach ()
 
 # Testing Kitsune's -fkokkos mode
-execute_process(COMMAND "${KIT_CONFIG}" --kokkos-mode
+execute_process(COMMAND "${KIT_CONFIG}" --kokkos
   OUTPUT_VARIABLE KOKKOS_MODE_STR
   OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)

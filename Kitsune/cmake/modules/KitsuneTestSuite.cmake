@@ -13,27 +13,38 @@ include(SingleMultiSource)
 # recognized as languages" languages that this will return are:
 #
 #    kitc       C files with kitsune-specific extensions
-#    kitc++     C++ files with kitsune-specific extensions
-#    kokkos     C++ files with Kokkos. These may or may not contain any
-#               Kitsune-specific extensions
+#    kitcxx     C++ files with kitsune-specific extensions
+#    kitfort    Fortran files with kitsune-specific extensions and/or language
+#               support. For instance, if it is a Fortran source file where
+#               the DO CONCURRENT construct is intended to be lowered via the
+#               tapir dialect instead of the standard/OpenMP dialects
+#    kitkokkos  C++ files with Kokkos. These may or may not contain any
+#               Kitsune-specific extensions, but these are intended to be
+#               compiled by Kitsune with --kokkos
 #
 #    c          C files without kitsune-specific extensions
-#    c++        C++ files without kitsune-specific extensions
-#    fortran    Fortran files
+#    cxx        C++ files without kitsune-specific extensions
+#    fortran    Fortran files without any special handling
 #    cuda       Cuda files (those with a .cu extension)
 #    hip        Hip files (those with a .hip extension)
 #
 function (source_language source lang)
-  if (source MATCHES ".+[.]kokkos[.]cpp$" OR source MATCHES ".+[.]kokkos[.]c$")
-    set(${lang} "kokkos" PARENT_SCOPE)
+  if (source MATCHES ".+[.]kokkos[.]kit[.]cpp$")
+    set(${lang} "kitkokkos" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]kit[.]c$" OR source MATCHES ".+[.]kit[.]c$")
     set(${lang} "kitc" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]kit[.]cpp$" OR source MATCHES ".+[.]kit[.]cc$")
-    set(${lang} "kitc++" PARENT_SCOPE)
+    set(${lang} "kitcxx" PARENT_SCOPE)
+  elseif (source MATCHES ".+[.]kit[.][Ff]$" OR
+      source MATCHES ".+[.]kit[.][Ff]90$" OR
+      source MATCHES ".+[.]kit[.][Ff]95$" OR
+      source MATCHES ".+[.]kit[.][Ff]03$" OR
+      source MATCHES ".+[.]kit[.][Ff]08$")
+    set(${lang} "kitfort" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]c$")
     set(${lang} "c" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]cpp$" OR source MATCHES ".+[.]cc$")
-    set(${lang} "c++" PARENT_SCOPE)
+    set(${lang} "cxx" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]cu$")
     set(${lang} "cuda" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]hip$")
@@ -134,6 +145,18 @@ function (kit_singlesource_test source lang tapir_target cmdargs)
 
   register_test("${target}" "${tapir_target}" "${cmdargs}")
 
+  # If this is a target that is compiled with --tapir=, set the additional
+  # flags that were provided at configure time.
+  if (target STREQUAL "${base}-${tapir_target}")
+    if (lang STREQUAL "kitc")
+      target_compile_options(${target} PUBLIC "${KITSUNE_C_FLAGS}")
+    elseif (lang STREQUAL "kitcxx" OR lang STREQUAL "kitkokkos")
+      target_compile_options(${target} PUBLIC ${KITSUNE_CXX_FLAGS})
+    elseif (lang STREQUAL "kitfort")
+      target_compile_options(${target} PUBLIC "${KITSUNE_Fortran_FLAGS}")
+    endif ()
+  endif ()
+
   # Since we do not support cross compiling, or portability across GPUs, just
   # compile the vanilla cuda code for the current GPU. If this is not done, it
   # will try to JIT the code which we don't want because it becomes a less fair
@@ -142,9 +165,9 @@ function (kit_singlesource_test source lang tapir_target cmdargs)
     set_target_properties(${target} PROPERTIES CUDA_ARCHITECTURES "native")
   endif ()
 
-  # We probably need the kokkos flags on the linker as well because Kokkos'
-  # runtime does need to be linked, but I am not entirely certain.
-  if (lang STREQUAL "kokkos")
+  # cmake uses the compiler when linking. By passing -fkokkos to it, we ensure
+  # that Kitsune correctly links the Kokkos libraries.
+  if (lang STREQUAL "kitkokkos")
     target_compile_options(${target} BEFORE PUBLIC -fkokkos -fkokkos-no-init)
     target_link_options(${target} BEFORE PUBLIC -fkokkos)
   endif ()
@@ -235,34 +258,26 @@ function(kitsune_singlesource)
         kit_singlesource_test(${source} ${lang} "none" "${cmdargs}" "${data}")
       endif ()
     elseif (lang STREQUAL "kokkos")
-      # Kokkos is only tested with the GPU-centric tapir targets because those
-      # are the only ones that we really care about as far as Kokkos support
-      # goes.
-      #
-      # We don't test "vanilla" Kokkos. We only care about Kokkos on GPU's which
-      # requires a specific installation of Kokkos for every GPU that we are
-      # care about. As far as I am aware, it is not possible to have both
-      # support for both NVIDIA and AMD GPU's in the same Kokkos installation.
-      # Kitsune builds Kokkos in "serial" mode since Kitsune only cares about
-      # the frontend i.e. the Kokkos templates, so we cannot use the Kokkos
-      # installation that is bundled with Kitsune either.
-      #
-      # TODO: It would be nice to be able to automatically compare against
-      # "Kokkos+cuda" and "Kokkos+hip", so we may want to try and find a way to
-      # do so.
-      if (TEST_KOKKOS_MODE)
-        if (TEST_CUDA_TARGET)
-          kit_singlesource_test(${source} ${lang} "cuda" "${cmdargs}" "${data}")
-        endif ()
-        if (TEST_HIP_TARGET)
-          kit_singlesource_test(${source} ${lang} "hip" "${cmdargs}" "${data}")
-        endif ()
+      if (TEST_KOKKOS_LANG)
+        # FIXME: Support vanilla kokkos.
+        #
+        # We only care about Kokkos on GPU's. This requires a specific build of
+        # Kokkos for every GPU that we wish to test on. As far as I am aware, it
+        # is not possible to have both support for both NVIDIA and AMD GPU's in
+        # the same Kokkos installation. Kitsune builds Kokkos in "serial" mode
+        # since Kitsune only cares about the frontend i.e. the Kokkos templates,
+        # so we cannot use that.
+        #
+        # We probably need to download and install a Kokkos build for a specific
+        # GPU, or at least require the user to provide us the path to one at
+        # configure time in order for this to work.
+        message(WARNING "Vanilla kokkos is not yet supported")
       endif ()
     elseif (lang STREQUAL "kitc")
       if (TEST_C)
         kit_singlesource_all_targets(${source} ${lang} "${cmdargs}" "${data}")
       endif ()
-    elseif (lang STREQUAL "kitc++")
+    elseif (lang STREQUAL "kitcxx")
       if (TEST_CXX)
         kit_singlesource_all_targets(${source} ${lang} "${cmdargs}" "${data}")
       endif ()
@@ -273,8 +288,22 @@ function(kitsune_singlesource)
       if (TEST_Fortran)
         kit_singlesource_all_targets(${source} ${lang} "${cmdargs}" "${data}")
       endif ()
+    elseif (lang STREQUAL "kitkokkos")
+      if (TEST_KOKKOS_MODE)
+        # Kokkos is only tested with the GPU-centric tapir targets because those
+        # are the only ones that we really care about as far as Kokkos support
+        # goes.
+        if (TEST_CUDA_TARGET)
+          kit_singlesource_test(${source} ${lang} "cuda" "${cmdargs}" "${data}")
+        endif ()
+        if (TEST_HIP_TARGET)
+          kit_singlesource_test(${source} ${lang} "hip" "${cmdargs}" "${data}")
+        endif ()
+      endif ()
     else ()
-      message(FATAL_ERROR "Testing of file not supported: ${source} [${lang}]")
+      message(FATAL_ERROR
+        "Unsupported source file '${source}'. Detected language '${lang}'. "
+        "See Kitsune/README.md for source file name requirements")
     endif ()
   endforeach()
 endfunction()
@@ -304,7 +333,7 @@ endfunction()
 macro(make_target base type tapir_target kokkos out)
   set(target)
   if (kokkos)
-    set(target "${base}-kokkos-${tapir_target}")
+    set(target "${base}-kitkokkos-${tapir_target}")
   else ()
     set(target "${base}-${tapir_target}")
   endif ()
