@@ -62,16 +62,16 @@ intended as benchmarks. NOTE: This may skip some correctness checks"
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 # Build and run the vanilla cuda (.cu) tests
-set(TEST_CUDA_LANG OFF)
+set(TEST_VANILLA_CUDA OFF)
 
 # Build and run the vanilla hip (.hip) tests
-set(TEST_HIP_LANG OFF)
+set(TEST_VANILLA_HIP OFF)
 
 # Build and run the Kokkos tests with a vanilla (non-Kitsune) compiler.
-set(TEST_KOKKOS_LANG OFF)
+set(TEST_VANILLA_KOKKOS OFF)
 
 # Build and run the Fortran tests with a vanilla (non-Kitsune) compiler
-set(TEST_Fortran_LANG OFF)
+set(TEST_VANILLA_Fortran OFF)
 
 set(TEST_C OFF)
 set(TEST_CXX OFF)
@@ -403,7 +403,7 @@ else ()
 endif ()
 
 if (TEST_CUDA_TARGET AND KITSUNE_BENCHMARK)
-  set(TEST_CUDA_LANG ON)
+  set(TEST_VANILLA_CUDA ON)
 
   # We could use clang to compile the .cu files, but since this is only useful
   # for performance comparisons, use nvcc since that is expected to be the best
@@ -423,7 +423,7 @@ endif ()
 
 # See the comments for the cuda language tests above. Same goes for hip.
 if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
-  set(TEST_HIP_LANG ON)
+  set(TEST_VANILLA_HIP ON)
 
   # We could use clang to compile the .hip files, but since this is only useful
   # for performance comparisons, use hipcc since that is expected to be the best
@@ -437,6 +437,9 @@ if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
     PATHS ${HIP_PREFIX}/bin
     NO_DEFAULT_PATH)
 
+  # TODO: There used to be a warning about not setting CMAKE_HIP_COMPILER
+  # explicitly, but we should check for this when we eventually check that
+  # benchmark more works correctly.
   # set(CMAKE_HIP_COMPILER ${HIPCC})
   enable_language(HIP)
 endif ()
@@ -445,7 +448,7 @@ endif ()
 # a regular C++ compiler for performance checks. These are generally only useful
 # when doing performance comparisons.
 if (TEST_KOKKOS_MODE AND KITSUNE_BENCHMARK)
-  set(TEST_KOKKOS_LANG ON)
+  set(TEST_VANILLA_KOKKOS ON)
 endif ()
 
 # CMake adds -Werror=date-time in order to get reproducible builds. This is a

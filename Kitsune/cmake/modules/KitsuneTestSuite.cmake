@@ -27,6 +27,9 @@ include(SingleMultiSource)
 #    fortran    Fortran files without any special handling
 #    cuda       Cuda files (those with a .cu extension)
 #    hip        Hip files (those with a .hip extension)
+#    kokkos     C++ files with Kokkos. These are intended to be compiled with a
+#               vanilla C++ compiler (kitsune without --tapir or --kokkos will
+#               work) and linked against a Kokkos installation
 #
 function (source_language source lang)
   if (source MATCHES ".+[.]kokkos[.]kit[.]cpp$")
@@ -41,6 +44,9 @@ function (source_language source lang)
       source MATCHES ".+[.]kit[.][Ff]03$" OR
       source MATCHES ".+[.]kit[.][Ff]08$")
     set(${lang} "kitfort" PARENT_SCOPE)
+  elseif (source MATCHES ".+[.]kokkkos[.]cpp$" OR
+      source MATCHES ".+[.]kokkos[.]cc$")
+    set(${lang} "kokkos" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]c$")
     set(${lang} "c" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]cpp$" OR source MATCHES ".+[.]cc$")
@@ -133,11 +139,13 @@ function (kit_singlesource_test source lang tapir_target cmdargs)
   string(REPLACE "." "-" base "${base}")
   if (tapir_target STREQUAL "none")
     if (lang STREQUAL "cuda")
-      set(target "${base}-culang")
+      set(target "${base}-vanilla-cuda")
     elseif (lang STREQUAL "hip")
-      set(target "${base}-hiplang")
+      set(target "${base}-vanilla-hip")
+    elseif (lang STREQUAL "kokkos")
+      set(target "${base}-vanilla-kokkos")
     else ()
-      set(target "${base}-nokit")
+      message(FATAL_ERROR "Unsupported vanilla language '${lang}' for '${source}'")
     endif ()
   else ()
     set(target "${base}-${tapir_target}")
@@ -250,15 +258,15 @@ function(kitsune_singlesource)
     source_language(${source} lang)
 
     if (lang STREQUAL "cuda")
-      if (TEST_CUDA_LANG)
+      if (TEST_VANILLA_CUDA)
         kit_singlesource_test(${source} ${lang} "none" "${cmdargs}" "${data}")
       endif ()
     elseif (lang STREQUAL "hip")
-      if (TEST_HIP_LANG)
+      if (TEST_VANILLA_HIP)
         kit_singlesource_test(${source} ${lang} "none" "${cmdargs}" "${data}")
       endif ()
     elseif (lang STREQUAL "kokkos")
-      if (TEST_KOKKOS_LANG)
+      if (TEST_VANILLA_KOKKOS)
         # FIXME: Support vanilla kokkos.
         #
         # We only care about Kokkos on GPU's. This requires a specific build of
