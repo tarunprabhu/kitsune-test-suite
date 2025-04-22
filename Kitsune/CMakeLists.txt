@@ -47,6 +47,9 @@ set(KITSUNE_CXX_FLAGS_EXTRA "" CACHE STRING
 set(KITSUNE_Fortran_FLAGS_EXTRA "" CACHE STRING
   "Additional options to pass to Kitsune's Fortran frontend")
 
+set(KITSUNE_LINKER_FLAGS_EXTRA "" CACHE STRING
+  "Additional options to pass to the linker when building executables")
+
 option(KITSUNE_TEST_KOKKOS_MODE
   "Check Kitsune's -fkokkos-mode if it has been enabled"
   ON)
@@ -198,6 +201,13 @@ if (TEST_CXX)
     NO_DEFAULT_PATH)
   message(STATUS "Testing langauge: C++")
 endif ()
+
+set(KITSUNE_LINKER_FLAGS
+  ${CMAKE_EXE_LINKER_FLAGS}
+  ${KITSUNE_LINKER_FLAGS_EXTRA})
+string(STRIP "${KITSUNE_LINKER_FLAGS}" KITSUNE_LINKER_FLAGS)
+string(REPLACE " " ";" KITSUNE_LINKER_FLAGS "${KITSUNE_LINKER_FLAGS}")
+message(STATUS "Linker options: ${KITSUNE_LINKER_FLAGS}")
 
 # Check that ${CMAKE_Fortran_COMPILER} is the same as the Fortran frontend
 # returned by kit-config

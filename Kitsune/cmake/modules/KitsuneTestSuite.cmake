@@ -104,7 +104,7 @@ function (register_test target tapir_target cmdargs)
     # We need to set the tapir flags on the link options, otherwise the runtime
     # libraries (kitrt, opencilk etc.) will not be linked in correctly.
     target_compile_options(${target} BEFORE PUBLIC "${tapir_flags}")
-    target_link_options(${target} BEFORE PUBLIC "${tapir_flags}")
+    target_link_options(${target} BEFORE PUBLIC "${tapir_flags}" "${KITSUNE_LINKER_FLAGS}")
   endif ()
 endfunction ()
 
@@ -367,7 +367,7 @@ macro(make_target base type tapir_target kokkos out)
   endif ()
 
   target_compile_options(${target} BEFORE PUBLIC -flto ${tapir_flags})
-  target_link_options(${target} PUBLIC -flto ${tapir_flags})
+  target_link_options(${target} PUBLIC -flto ${tapir_flags} ${KITSUNE_LINKER_FLAGS})
 
   if (kokkos)
     target_compile_options(${target} BEFORE PUBLIC -fkokkos -fkokkos-no-init)
