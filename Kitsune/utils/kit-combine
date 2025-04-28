@@ -10,12 +10,12 @@ import sys
 # The regular expression to extract the name of the test and the tapir target
 # from the name of the test script file. The name of the test is the first
 # match, the tapir target is the third.
-re_kit_test = re.compile('^(.+?)-(kit|kokkos-kit)-(.+?)[.]test$')
+re_kit_test = re.compile('^(.+?)-(c|cxx|fortran|kokkos)-(.+?)[.]test$')
 
 # The result expression to extract the name of the test and the language from
 # name of the test script file. This name of the language is guaranteed to be
 # either culang or hiplang.
-re_vanilla_test = re.compile('^(.+)-vanilla-(cuda|hip|kokkos)[.]test$')
+re_vanilla_test = re.compile('^(.+)-(cuda|hip|kokkos-nvidia|kokkos-amd)[.]test$')
 
 # Get the test name. The argument is a path to a .test file. In the case of a
 # Benchmark or MultiSource test, the test name will be the name of the directory
@@ -63,7 +63,7 @@ def get_tapir_target_or_lang(base: str) -> str:
     m = re_vanilla_test.match(b)
     if not m:
         return get_tapir_target(base)
-    elif m[2] == 'cuda' or m[2] == 'hip' or m[2] == 'kokkos':
+    elif m[2] in ['cuda', 'hip', 'kokkos-nvidia', 'kokkos-amd']:
         return 'vanilla-' + m[2]
     else:
         sys.exit(f'Could not get tapir target or language: {base}')

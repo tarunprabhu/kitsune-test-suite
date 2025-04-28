@@ -50,6 +50,12 @@ set(KITSUNE_Fortran_FLAGS_EXTRA "" CACHE STRING
 set(KITSUNE_LINKER_FLAGS_EXTRA "" CACHE STRING
   "Additional options to pass to the linker when building executables")
 
+set(KOKKOS_CUDA_PREFIX "" CACHE STRING
+  "Path to the Kokkos (cuda \"backend\") install prefix")
+
+set(KOKKOS_HIP_PREFIX "" CACHE STRING
+  "Path to the Kokkos (hip \"backend\") install prefix")
+
 option(KITSUNE_TEST_KOKKOS_MODE
   "Check Kitsune's -fkokkos-mode if it has been enabled"
   ON)
@@ -70,8 +76,13 @@ set(TEST_VANILLA_CUDA OFF)
 # Build and run the vanilla hip (.hip) tests
 set(TEST_VANILLA_HIP OFF)
 
-# Build and run the Kokkos tests with a vanilla (non-Kitsune) compiler.
-set(TEST_VANILLA_KOKKOS OFF)
+# Build and run the Kokkos tests with a vanilla (non-Kitsune) compiler where
+# Kokkos has been built with the cuda backend.
+set(TEST_VANILLA_KOKKOS_CUDA OFF)
+
+# Build and run the Kokkos tests with a vanilla (non-Kitsune) compile where
+# Kokkos has been built with the hip backend.
+set(TEST_VANILLA_KOKKOS_HIP OFF)
 
 # Build and run the Fortran tests with a vanilla (non-Kitsune) compiler
 set(TEST_VANILLA_Fortran OFF)
@@ -318,60 +329,46 @@ endforeach ()
 
 foreach (tapir_target ${TEST_TAPIR_TARGETS})
   if (tapir_target STREQUAL "cuda")
-    # It is possible that the cuda target has been built, but the device on
-    # which the tests are built (and run) does not have an NVIDIA GPU. In this
-    # case, skip the cuda target
-    execute_process(COMMAND "${KIT_CONFIG}" --cuda-prefix
-      OUTPUT_VARIABLE CUDA_PREFIX
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      COMMAND_ERROR_IS_FATAL ANY)
+    # If the cuda target has been built, but the device on which this is run
+    # does not have an NVIDIA GPU. In this case, skip the cuda target.
+    #
+    # nvptx-arch is guaranteed to be built when Kitsune is built, so use that
+    # to determine if an NVIDIA GPU is present.
+    find_program(NVPTX_ARCH nvptx-arch REQUIRED
+      PATHS ${COMPILER_BINDIR}
+      NO_DEFAULT_PATH)
 
-    find_program(NVIDIA_SMI nvidia-smi REQUIRED)
-
-    execute_process(COMMAND "${NVIDIA_SMI}"
-      RESULT_VARIABLE NVIDIA_SMI_RESULT
-      OUTPUT_QUIET
+    execute_process(COMMAND "${NVPTX_ARCH}"
+      OUTPUT_VARIABLE NVPTX_ARCHS
       ERROR_QUIET)
 
-    if (NOT NVIDIA_SMI_RESULT STREQUAL "0")
-      set(TEST_CUDA_TARGET OFF)
-      message(WARNING "No NVIDIA GPU's found! Skipping tapir target: cuda")
-    else ()
+    if (NVPTX_ARCHS)
       set(TEST_CUDA_TARGET ON)
       message(STATUS "Testing tapir target: cuda")
+    else ()
+      set(TEST_CUDA_TARGET OFF)
+      message(WARNING "No NVIDIA GPU's found! Skipping tapir target: cuda")
     endif ()
   elseif (tapir_target STREQUAL "hip")
-    # It is possible that the hip target has been built, but the device on which
-    # the tests are built (and run) does not have an AMD GPU. In this case, skip
-    # the hip target
-    execute_process(COMMAND "${KIT_CONFIG}" --hip-prefix
-      OUTPUT_VARIABLE HIP_PREFIX
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      COMMAND_ERROR_IS_FATAL ANY)
+    # If the cuda target has been built, but the device on which this is run
+    # does not have an AMD GPU. In this case, skip the hip target.
+    #
+    # amdgpu-arch is guaranteed to be built when Kitsune is built, so use that
+    # to determine if an AMD GPU is present.
+    find_program(AMDGPU_ARCH amdgpu-arch REQUIRED
+      PATHS ${COMPILER_BINDIR}
+      NO_DEFAULT_PATH)
 
-    find_program(ROCM_SMI rocm-smi REQUIRED)
+    execute_process(COMMAND "${AMDGPU_ARCH}"
+      OUTPUT_VARIABLE AMDGPU_ARCHS
+      ERROR_QUIET)
 
-    execute_process(COMMAND "${ROCM_SMI}" -i
-      RESULT_VARIABLE ROCM_SMI_RESULT
-      OUTPUT_VARIABLE ROCM_SMI_OUT
-      ERROR_VARIABLE ROCM_SMI_ERR)
-
-    # Of course, rocm-smi will not return an error code if a GPU is not found.
-    # Yes, yes, one can make an argument for why the absence of a GPU is
-    # "normal", but it is not unreasonable to expect "found GPU" to be success
-    # and "GPU not found" to be a failure in a tool like this. Plus, there is
-    # guarantee that this string will not change. *#&$(@*@!
-    string(FIND "${ROCM_SMI_OUT}" "Driver not initialized" ERR_OUT)
-    string(FIND "${ROCM_SMI_ERR}" "Driver not initialized" ERR_ERR)
-
-    if (NOT ROCM_SMI_RESULT STREQUAL 0
-        OR NOT ERR_OUT STREQUAL -1
-        OR NOT ERR_ERR STREQUAL -1)
-      set(TEST_HIP_TARGET OFF)
-      message(WARNING "No AMD GPU's found! Skipping tapir target: hip")
-    else ()
+    if (AMDGPU_ARCHS)
       set(TEST_HIP_TARGET ON)
       message(STATUS "Testing tapir target: hip")
+    else ()
+      set(TEST_HIP_TARGET OFF)
+      message(WARNING "No AMD GPU's found! Skipping tapir target: hip")
     endif ()
   elseif (tapir_target STREQUAL "lambda")
     set(TEST_LAMBDA_TARGET ON)
@@ -432,7 +429,9 @@ if (TEST_CUDA_TARGET AND KITSUNE_BENCHMARK)
 endif ()
 
 # See the comments for the cuda language tests above. Same goes for hip.
-if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
+# FIXME: Temporarily always test vanilla hip.
+# if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
+if (TEST_HIP_TARGET)
   set(TEST_VANILLA_HIP ON)
 
   # We could use clang to compile the .hip files, but since this is only useful
@@ -455,10 +454,29 @@ if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
 endif ()
 
 # Similar to Cuda and Hip, we may also want to check the .kokkos.cpp files with
-# a regular C++ compiler for performance checks. These are generally only useful
-# when doing performance comparisons.
-if (TEST_KOKKOS_MODE AND KITSUNE_BENCHMARK)
-  set(TEST_VANILLA_KOKKOS ON)
+# a regular C++ compiler for performance checks. These are only useful when
+# doing performance comparisons.
+#
+# FIXME: Temporarily always test vanilla kokkos while we automate setting up
+# Kokkos etc.
+# if (TEST_KOKKOS_MODE AND KITSUNE_BENCHMARK)
+if (TEST_KOKKOS_MODE)
+  if (TEST_VANILLA_CUDA)
+    set(TEST_VANILLA_KOKKOS_CUDA ON)
+    if (NOT KOKKOS_CUDA_PREFIX)
+      message(FATAL_ERROR "KOKKOS_CUDA_PREFIX must be set to test Kokkos (cuda)")
+    endif ()
+  endif ()
+
+  if (TEST_VANILLA_HIP)
+    set(TEST_VANILLA_KOKKOS_HIP ON)
+    if (NOT KOKKOS_HIP_PREFIX)
+      message(FATAL_ERROR "KOKKOS_HIP_PREFIX must be set to test Kokkos (hip)")
+    endif ()
+    find_package(Kokkos REQUIRED CONFIG
+      PATHS ${KOKKOS_HIP_PREFIX}/lib/cmake
+      NO_DEFAULT_PATH)
+  endif ()
 endif ()
 
 # CMake adds -Werror=date-time in order to get reproducible builds. This is a

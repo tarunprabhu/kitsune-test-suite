@@ -122,7 +122,8 @@ static size_t check(const Arr &a, const Arr &b, const Arr &c, size_t n) {
 }
 
 template <typename Arr> static void alloc(Arr &a, Arr &b, Arr &c, size_t n) {
-#if defined(__CUDACC__)
+#if defined(__KOKKOS__)
+#elif defined(__CUDACC__)
   cudaMallocManaged(&a, n * sizeof(ElementType));
   cudaMallocManaged(&b, n * sizeof(ElementType));
   cudaMallocManaged(&c, n * sizeof(ElementType));
@@ -155,7 +156,8 @@ static void header(const std::string &label, Arr &a, Arr &b, Arr &c, size_t n) {
 }
 
 template <typename Arr> static void dealloc(Arr &a, Arr &b, Arr &c) {
-#if defined(__CUDACC__)
+#if defined(__KOKKOS__)
+#elif defined(__CUDACC__)
   cudaFree(a);
   cudaFree(b);
   cudaFree(c);

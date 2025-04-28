@@ -44,7 +44,7 @@ function (source_language source lang)
       source MATCHES ".+[.]kit[.][Ff]03$" OR
       source MATCHES ".+[.]kit[.][Ff]08$")
     set(${lang} "kitfort" PARENT_SCOPE)
-  elseif (source MATCHES ".+[.]kokkkos[.]cpp$" OR
+  elseif (source MATCHES ".+[.]kokkos[.]cpp$" OR
       source MATCHES ".+[.]kokkos[.]cc$")
     set(${lang} "kokkos" PARENT_SCOPE)
   elseif (source MATCHES ".+[.]c$")
@@ -135,20 +135,26 @@ endfunction()
 #                    the test
 #
 function (kit_singlesource_test source lang tapir_target cmdargs)
-  get_filename_component(base "${source}" NAME_WLE)
-  string(REPLACE "." "-" base "${base}")
+  get_filename_component(base "${source}" NAME_WE)
   if (tapir_target STREQUAL "none")
-    if (lang STREQUAL "cuda")
-      set(target "${base}-vanilla-cuda")
-    elseif (lang STREQUAL "hip")
-      set(target "${base}-vanilla-hip")
-    elseif (lang STREQUAL "kokkos")
-      set(target "${base}-vanilla-kokkos")
+    if (lang STREQUAL "cuda" OR
+        lang STREQUAL "hip" OR
+        lang STREQUAL "kokkos-nvidia" OR
+        lang STREQUAL "kokkos-amd")
+      set(target ${base}-${lang})
     else ()
-      message(FATAL_ERROR "Unsupported vanilla language '${lang}' for '${source}'")
+      message(FATAL_ERROR "Unsupported language '${lang}' for '${source}'")
     endif ()
+  elseif (lang STREQUAL "kitkokkos")
+    set(target "${base}-kokkos-${tapir_target}")
+  elseif (lang STREQUAL "kitc")
+    set(target "${base}-c-${tapir_target}")
+  elseif (lang STREQUAL "kitcxx")
+    set(target "${base}-cxx-${tapir_target}")
+  elseif (lang STREQUAL "kitfort")
+    set(target "${base}-fortran-${tapir_target}")
   else ()
-    set(target "${base}-${tapir_target}")
+    message(FATAL_ERROR "Language '${lang}' not handled for '${source}'")
   endif ()
 
   register_test("${target}" "${tapir_target}" "${cmdargs}")
@@ -178,6 +184,21 @@ function (kit_singlesource_test source lang tapir_target cmdargs)
   if (lang STREQUAL "kitkokkos")
     target_compile_options(${target} BEFORE PUBLIC -fkokkos -fkokkos-no-init)
     target_link_options(${target} BEFORE PUBLIC -fkokkos)
+  endif ()
+
+  if (lang STREQUAL "kokkos-cuda")
+    target_include_directories(${target} BEFORE PUBLIC
+      ${KOKKOS_CUDA_PREFIX}/include)
+    target_link_libraries(${target} PUBLIC
+      ${KOKKOS_CUDA_PREFIX}/lib/libkokkoscore.a)
+  elseif (lang STREQUAL "kokkos-hip")
+    set_source_files_properties(${source} PROPERTIES
+      LANGUAGE HIP)
+    target_compile_definitions(${target} PUBLIC __HIP_PLATFORM_AMD__)
+    target_include_directories(${target} BEFORE PUBLIC
+      /opt/rocm/include
+      ${KOKKOS_HIP_PREFIX}/include)
+    target_link_libraries(${target} PUBLIC ${KOKKOS_HIP_PREFIX}/lib/libkokkoscore.a)
   endif ()
 endfunction()
 
@@ -266,20 +287,11 @@ function(kitsune_singlesource)
         kit_singlesource_test(${source} ${lang} "none" "${cmdargs}" "${data}")
       endif ()
     elseif (lang STREQUAL "kokkos")
-      if (TEST_VANILLA_KOKKOS)
-        # FIXME: Support vanilla kokkos.
-        #
-        # We only care about Kokkos on GPU's. This requires a specific build of
-        # Kokkos for every GPU that we wish to test on. As far as I am aware, it
-        # is not possible to have both support for both NVIDIA and AMD GPU's in
-        # the same Kokkos installation. Kitsune builds Kokkos in "serial" mode
-        # since Kitsune only cares about the frontend i.e. the Kokkos templates,
-        # so we cannot use that.
-        #
-        # We probably need to download and install a Kokkos build for a specific
-        # GPU, or at least require the user to provide us the path to one at
-        # configure time in order for this to work.
-        message(WARNING "Vanilla kokkos is not yet supported")
+      if (TEST_VANILLA_KOKKOS_CUDA)
+        kit_singlesource_test(${source} "${lang}-nvidia" "none" "${cmdargs}" "${data}")
+      endif ()
+      if (TEST_VANILLA_KOKKOS_HIP)
+        kit_singlesource_test(${source} "${lang}-amd" "none" "${cmdargs}" "${data}")
       endif ()
     elseif (lang STREQUAL "kitc")
       if (TEST_C)
