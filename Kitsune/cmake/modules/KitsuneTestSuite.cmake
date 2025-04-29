@@ -161,14 +161,12 @@ function (kit_singlesource_test source lang tapir_target cmdargs)
 
   # If this is a target that is compiled with --tapir=, set the additional
   # flags that were provided at configure time.
-  if (target STREQUAL "${base}-${tapir_target}")
-    if (lang STREQUAL "kitc")
-      target_compile_options(${target} PUBLIC "${KITSUNE_C_FLAGS}")
-    elseif (lang STREQUAL "kitcxx" OR lang STREQUAL "kitkokkos")
-      target_compile_options(${target} PUBLIC ${KITSUNE_CXX_FLAGS})
-    elseif (lang STREQUAL "kitfort")
-      target_compile_options(${target} PUBLIC "${KITSUNE_Fortran_FLAGS}")
-    endif ()
+  if (lang STREQUAL "kitc")
+    target_compile_options(${target} PUBLIC "${KITSUNE_C_FLAGS}")
+  elseif (lang STREQUAL "kitcxx" OR lang STREQUAL "kitkokkos")
+    target_compile_options(${target} PUBLIC ${KITSUNE_CXX_FLAGS})
+  elseif (lang STREQUAL "kitfort")
+    target_compile_options(${target} PUBLIC "${KITSUNE_Fortran_FLAGS}")
   endif ()
 
   # Since we do not support cross compiling, or portability across GPUs, just

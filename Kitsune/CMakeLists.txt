@@ -446,11 +446,20 @@ if (TEST_HIP_TARGET)
     PATHS ${HIP_PREFIX}/bin
     NO_DEFAULT_PATH)
 
-  # TODO: There used to be a warning about not setting CMAKE_HIP_COMPILER
-  # explicitly, but we should check for this when we eventually check that
-  # benchmark more works correctly.
-  # set(CMAKE_HIP_COMPILER ${HIPCC})
+  # This is utterly ridiculous! (I could think of several stronger, and perhaps
+  # more appropriate words, but that would be unprofessional)
+  #
+  # We cannot set CMAKE_HIP_COMPILER to the hipcc that we want to use (found
+  # above) for ... reasons. Instead, we are supposed to either use clang
+  # directly - which we don't really want to do because clang here is kitsune -
+  # or let cmake find hipcc. But cmake looks for hipcc in $PATH. It doesn't
+  # seem to care if you set ROCM_PATH or not. So the only thing we can do is
+  # to set $PATH to the directory containing hipcc just to let cmake find the
+  # right one, then restore $PATH.
+  set(PATH $ENV{PATH})
+  set(ENV{PATH} "${HIP_PREFIX}/bin")
   enable_language(HIP)
+  set(ENV{PATH} "${PATH}")
 endif ()
 
 # Similar to Cuda and Hip, we may also want to check the .kokkos.cpp files with
@@ -473,9 +482,6 @@ if (TEST_KOKKOS_MODE)
     if (NOT KOKKOS_HIP_PREFIX)
       message(FATAL_ERROR "KOKKOS_HIP_PREFIX must be set to test Kokkos (hip)")
     endif ()
-    find_package(Kokkos REQUIRED CONFIG
-      PATHS ${KOKKOS_HIP_PREFIX}/lib/cmake
-      NO_DEFAULT_PATH)
   endif ()
 endif ()
 
