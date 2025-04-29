@@ -6,30 +6,27 @@
 #include "timing.h"
 
 #define __KOKKOS__
-#include "vecadd.inc"
+#include "saxpy.inc"
 
 using DualView = Kokkos::DualView<ElementType *, Kokkos::LayoutRight,
                                   Kokkos::DefaultExecutionSpace>;
 
-template <> static void randomFill<>(DualView &vwa, size_t n, bool small) {
+template <> static void randomFill<>(DualView &vwa, size_t n) {
   const auto &arr = vwa.view_host();
   for (size_t i = 0; i < n; ++i) {
     arr(i) = rand() / ElementType(RAND_MAX);
-    if (not small)
-      arr(i) *= rand();
   }
 }
 
 template <>
-static size_t check(const DualView &vwa, const DualView &vwb,
-                    const DualView &vwc, size_t n) {
-  const auto &a = vwa.view_host();
-  const auto &b = vwb.view_host();
-  const auto &c = vwc.view_host();
-
+static size_t check(const DualView &vwx, const DualView &vwy,
+                    const DualView &vwr, size_t n) {
+  const auto &r = vwr.view_host();
+  const auto &x = vwx.view_host();
+  const auto &y = vwy.view_host();
   size_t errors = 0;
-  for (size_t i = 0; i < n; ++i)
-    if (checkRelErr(c(i), a(i) + b(i), epsilon))
+  for (size_t i = 0; i < n; i++)
+    if (checkRelErr(A * x[i] + y[i], r[i], epsilon))
       errors++;
   return errors;
 }
@@ -40,45 +37,45 @@ int main(int argc, char *argv[]) {
   {
     size_t n;
     unsigned iterations;
-    TimerGroup tg("vecadd");
+    TimerGroup tg("saxpy");
     Timer &total = tg.add("total", "Total");
 
     parseCommandLineInto(argc, argv, n, iterations);
 
-    DualView a = DualView("a", n);
-    DualView b = DualView("b", n);
-    DualView c = DualView("c", n);
+    DualView x = DualView("x", n);
+    DualView y = DualView("y", n);
+    DualView r = DualView("r", n);
 
-    header("kokkos", a, b, c, n);
+    header("kokkos", x, y, r, n);
 
-    a.modify_host();
-    b.modify_host();
+    x.modify_host();
+    y.modify_host();
 
     for (unsigned t = 0; t < iterations; t++) {
       total.start();
 
-      a.sync_device();
-      b.sync_device();
-      c.sync_device();
-      const auto &bufa = a.view_device();
-      const auto &bufb = b.view_device();
-      const auto &bufc = c.view_device();
+      x.sync_device();
+      y.sync_device();
+      r.sync_device();
+      const auto &bufx = x.view_device();
+      const auto &bufy = y.view_device();
+      const auto &bufr = r.view_device();
       // clang-format off
       Kokkos::parallel_for(n, KOKKOS_LAMBDA(const int i) {
-        bufc(i) = bufa(i) + bufb(i);
+        bufr(i) = A * bufx(i) + bufy(i);
       });
       // clang-format on
-      c.modify_device();
+      r.modify_device();
       Kokkos::fence();
 
       uint64_t us = total.stop();
       std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
     }
-    c.sync_host();
-    b.sync_host();
-    a.sync_host();
+    r.sync_host();
+    y.sync_host();
+    x.sync_host();
 
-    errors = footer(tg, a, b, c, n);
+    errors = footer(tg, x, y, r, n);
   }
   Kokkos::finalize();
 

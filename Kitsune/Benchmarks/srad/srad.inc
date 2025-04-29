@@ -154,7 +154,8 @@ template <typename Arr> static void randomFill(Arr &I, int rows, int cols) {
 template <typename FArr, typename IArr>
 static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                     IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE) {
-#if defined(__CUDACC__)
+#if defined(__KOKKOS__)
+#elif defined(__CUDACC__)
   cudaFree(I);
   cudaFree(J);
   cudaFree(c);
@@ -198,7 +199,8 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
                   IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE, int rows,
                   int cols) {
   int size_I = rows * cols;
-#if defined(__CUDACC__)
+#if defined(__KOKKOS__)
+#elif defined(__CUDACC__)
   cudaMallocManaged(&I, size_I * sizeof(float));
   cudaMallocManaged(&J, size_I * sizeof(float));
   cudaMallocManaged(&c, size_I * sizeof(float));
@@ -334,12 +336,18 @@ static size_t footer(TimerGroup &tg, FArr &I, FArr &J, FArr &c, IArr &iN,
   std::cout << "----\n\n";
 
   FILE *fp = fopen(outFile.c_str(), "wb");
+#if defined(__KOKKOS__)
+  for (size_t i = 0; i < rows * cols; ++i) {
+    float v = J.view_host()(i);
+    fwrite(&v, sizeof(float), 1, fp);
+  }
+#else
   fwrite(&*J, sizeof(float), rows * cols, fp);
+#endif
   fclose(fp);
 
   std::string checkFile = cpuRefFile;
-#if defined(__CUDACC__) || defined(__HIP__)
-
+#if defined(__CUDACC__) || defined(__HIP__) || defined(__KOKKOS__)
   checkFile = gpuRefFile;
 #else
   std::string tt = __kitsune_tt__;

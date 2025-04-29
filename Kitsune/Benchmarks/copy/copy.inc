@@ -102,23 +102,16 @@ template <typename Arr> static void randomFill(Arr &arr, size_t n) {
 
 template <typename Arr>
 static size_t check(const Arr &dst, const Arr &src, size_t n) {
-  std::cout << "\n  Checking with epsilon = 0 ..." << std::flush;
-
   size_t errors = 0;
   for (size_t i = 0; i < n; i++)
     if (dst[i] != src[i])
       errors++;
-
-  if (errors)
-    std::cout << "  FAIL! (" << errors << " errors found)\n\n";
-  else
-    std::cout << "  pass\n\n";
-
   return errors;
 }
 
 template <typename Arr> static void alloc(Arr &dst, Arr &src, size_t n) {
-#if defined(__CUDACC__)
+#if defined(__KOKKOS__)
+#elif defined(__CUDACC__)
   cudaMallocManaged(&dst, n * sizeof(ElementType));
   cudaMallocManaged(&src, n * sizeof(ElementType));
 #elif defined(__HIP__)
@@ -147,7 +140,8 @@ static void header(const std::string &label, Arr &dst, Arr &src, size_t n) {
 }
 
 template <typename Arr> static void dealloc(Arr &dst, Arr &src) {
-#if defined(__CUDACC__)
+#if defined(__KOKKOS__)
+#elif defined(__CUDACC__)
   cudaFree(dst);
   cudaFree(src);
 #elif defined(__HIP__)
@@ -161,7 +155,13 @@ template <typename Arr> static void dealloc(Arr &dst, Arr &src) {
 
 template <typename Arr>
 static size_t footer(TimerGroup &tg, Arr &dst, Arr &src, size_t n) {
+  std::cout << "\n  Checking with epsilon = 0 ..." << std::flush;
   size_t errors = check(dst, src, n);
+  if (errors)
+    std::cout << "  FAIL! (" << errors << " errors found)\n\n";
+  else
+    std::cout << "  pass\n\n";
+
   dealloc(dst, src);
   if (showJSON)
     tg.json(std::cout);

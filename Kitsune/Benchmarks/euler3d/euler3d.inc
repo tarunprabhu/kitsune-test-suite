@@ -110,11 +110,54 @@ static void parseCommandLineInto(int argc, char *argv[],
 }
 
 template <typename FArr, typename IArr>
+static void alloc(FArr &ff_variable, FArr &areas,
+                  IArr &elements_surrounding_elements, FArr &normals,
+                  FArr &variables, FArr &old_variables, FArr &fluxes,
+                  FArr &step_factors, int nelr) {
+#if defined(__KOKKOS__)
+  areas = DualView<float>("areas", nelr);
+  elements_surrounding_elements =
+      DualView<int>("elements_surrounding_elements", nelr * NNB);
+  normals = DualView<float>("normals", NDIM * NNB * nelr);
+  variables = DualView<float>("variables", nelr * NVAR);
+  old_variables = DualView<float>("old_variables", nelr * NVAR);
+  fluxes = DualView<float>("fluxes", nelr * NVAR);
+  step_factors = DualView<float>("step_factors", nelr);
+#elif defined(__CUDACC__)
+  cudaMallocManaged(&areas, nelr * sizeof(float));
+  cudaMallocManaged(&elements_surrounding_elements, nelr * NNB * sizeof(int));
+  cudaMallocManaged(&normals, nelr * NDIM * NNB * sizeof(float));
+  cudaMallocManaged(&variables, nelr * NVAR * sizeof(float));
+  cudaMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
+  cudaMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
+  cudaMallocManaged(&step_factors, nelr * sizeof(float));
+#elif defined(__HIP__)
+  (void)hipMallocManaged(&areas, nelr * sizeof(float));
+  (void)hipMallocManaged(&elements_surrounding_elements,
+                         nelr * NNB * sizeof(int));
+  (void)hipMallocManaged(&normals, nelr * NDIM * NNB * sizeof(float));
+  (void)hipMallocManaged(&variables, nelr * NVAR * sizeof(float));
+  (void)hipMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
+  (void)hipMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
+  (void)hipMallocManaged(&step_factors, nelr * sizeof(float));
+#else
+  areas.alloc(nelr);
+  elements_surrounding_elements.alloc(nelr * NNB);
+  normals.alloc(NDIM * NNB * nelr);
+  variables.alloc(nelr * NVAR);
+  old_variables.alloc(nelr * NVAR);
+  fluxes.alloc(nelr * NVAR);
+  step_factors.alloc(nelr);
+#endif
+}
+
+template <typename FArr, typename IArr>
 static void dealloc(FArr &ff_variable, FArr &areas,
                     IArr &elements_surrounding_elements, FArr &normals,
                     FArr &variables, FArr &old_variables, FArr &fluxes,
                     FArr &step_factors) {
-#if defined(__CUDACC__)
+#if defined(__KOKKOS__)
+#elif defined(__CUDACC__)
   cudaFree(ff_variable);
   cudaFree(areas);
   cudaFree(elements_surrounding_elements);
@@ -142,50 +185,6 @@ static void dealloc(FArr &ff_variable, FArr &areas,
   fluxes.free();
   step_factors.free();
 #endif
-}
-
-template <typename FArr, typename IArr>
-static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
-                  IArr &jW, FArr &dN, FArr &dS, FArr &dW, FArr &dE, int rows,
-                  int cols) {
-  int size_I = rows * cols;
-#if defined(__CUDACC__)
-  cudaMallocManaged(&I, size_I * sizeof(float));
-  cudaMallocManaged(&J, size_I * sizeof(float));
-  cudaMallocManaged(&c, size_I * sizeof(float));
-  cudaMallocManaged(&iN, rows * sizeof(int));
-  cudaMallocManaged(&iS, rows * sizeof(int));
-  cudaMallocManaged(&jW, cols * sizeof(int));
-  cudaMallocManaged(&jE, cols * sizeof(int));
-  cudaMallocManaged(&dN, size_I * sizeof(float));
-  cudaMallocManaged(&dS, size_I * sizeof(float));
-  cudaMallocManaged(&dW, size_I * sizeof(float));
-  cudaMallocManaged(&dE, size_I * sizeof(float));
-#elif defined(__HIP__)
-  (void)hipMallocManaged(&I, size_I * sizeof(float));
-  (void)hipMallocManaged(&J, size_I * sizeof(float));
-  (void)hipMallocManaged(&c, size_I * sizeof(float));
-  (void)hipMallocManaged(&iN, rows * sizeof(int));
-  (void)hipMallocManaged(&iS, rows * sizeof(int));
-  (void)hipMallocManaged(&jW, cols * sizeof(int));
-  (void)hipMallocManaged(&jE, cols * sizeof(int));
-  (void)hipMallocManaged(&dN, size_I * sizeof(float));
-  (void)hipMallocManaged(&dS, size_I * sizeof(float));
-  (void)hipMallocManaged(&dW, size_I * sizeof(float));
-  (void)hipMallocManaged(&dE, size_I * sizeof(float));
-#else
-  I.alloc(size_I);
-  J.alloc(size_I);
-  c.alloc(size_I);
-  iN.alloc(rows);
-  iS.alloc(rows);
-  jW.alloc(cols);
-  jE.alloc(cols);
-  dN.alloc(size_I);
-  dS.alloc(size_I);
-  dW.alloc(size_I);
-  dE.alloc(size_I);
-#endif // CPU
 }
 
 static void header(const std::string &label, const std::string &domainFile,
@@ -258,32 +257,8 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
   nelr =
       block_length * ((nel / block_length) + std::min(1, nel % block_length));
 
-#if defined(__CUDACC__)
-  cudaMallocManaged(&areas, nelr * sizeof(float));
-  cudaMallocManaged(&elements_surrounding_elements, nelr * NNB * sizeof(int));
-  cudaMallocManaged(&normals, nelr * NDIM * NNB * sizeof(float));
-  cudaMallocManaged(&variables, nelr * NVAR * sizeof(float));
-  cudaMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
-  cudaMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
-  cudaMallocManaged(&step_factors, nelr * sizeof(float));
-#elif defined(__HIP__)
-  (void)hipMallocManaged(&areas, nelr * sizeof(float));
-  (void)hipMallocManaged(&elements_surrounding_elements,
-                         nelr * NNB * sizeof(int));
-  (void)hipMallocManaged(&normals, nelr * NDIM * NNB * sizeof(float));
-  (void)hipMallocManaged(&variables, nelr * NVAR * sizeof(float));
-  (void)hipMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
-  (void)hipMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
-  (void)hipMallocManaged(&step_factors, nelr * sizeof(float));
-#else
-  areas.alloc(nelr);
-  elements_surrounding_elements.alloc(nelr * NNB);
-  normals.alloc(NDIM * NNB * nelr);
-  variables.alloc(nelr * NVAR);
-  old_variables.alloc(nelr * NVAR);
-  fluxes.alloc(nelr * NVAR);
-  step_factors.alloc(nelr);
-#endif
+  alloc(ff_variable, areas, elements_surrounding_elements, normals, variables,
+        old_variables, fluxes, step_factors, nelr);
 
   // read in data
   for (int i = 0; i < nel; i++) {
@@ -415,7 +390,7 @@ static bool footer(const TimerGroup &tg, FArr &ff_variable, FArr &areas,
   save(outFile, variables, nel, nelr);
 
   std::string checkFile = cpuRefFile;
-#if defined(__CUDACC__) || defined(__HIP__)
+#if defined(__CUDACC__) || defined(__HIP__) || defined(__KOKKOS__)
   checkFile = gpuRefFile;
 #else
   std::string tt = __kitsune_tt__;

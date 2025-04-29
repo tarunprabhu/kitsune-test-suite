@@ -186,12 +186,12 @@ function (kit_singlesource_test source lang tapir_target cmdargs)
     target_link_options(${target} BEFORE PUBLIC -fkokkos)
   endif ()
 
-  if (lang STREQUAL "kokkos-cuda")
+  if (lang STREQUAL "kokkos-nvidia")
     target_include_directories(${target} BEFORE PUBLIC
       ${KOKKOS_CUDA_PREFIX}/include)
     target_link_libraries(${target} PUBLIC
       ${KOKKOS_CUDA_PREFIX}/lib/libkokkoscore.a)
-  elseif (lang STREQUAL "kokkos-hip")
+  elseif (lang STREQUAL "kokkos-amd")
     set_source_files_properties(${source} PROPERTIES
       LANGUAGE HIP)
     target_compile_definitions(${target} PUBLIC __HIP_PLATFORM_AMD__)

@@ -104,20 +104,10 @@ static constexpr ElementType epsilon = 0.0;
 
 template <typename Arr>
 static size_t check(const Arr &a, const Arr &b, const Arr &c, size_t n) {
-  char buf[16];
-  snprintf(buf, 16, "%.6g", epsilon);
-  std::cout << "\n  Checking with epsilon = " << buf << " ..." << std::flush;
-
   size_t errors = 0;
   for (size_t i = 0; i < n; i++)
     if (checkRelErr(c[i], a[i] + b[i], epsilon))
       errors++;
-
-  if (errors)
-    std::cout << "  FAIL! (" << errors << " errors found)\n\n";
-  else
-    std::cout << "  pass\n\n";
-
   return errors;
 }
 
@@ -174,7 +164,15 @@ template <typename Arr> static void dealloc(Arr &a, Arr &b, Arr &c) {
 
 template <typename Arr>
 static size_t footer(TimerGroup &tg, Arr &a, Arr &b, Arr &c, size_t n) {
+  char buf[16];
+  snprintf(buf, 16, "%.6g", epsilon);
+  std::cout << "\n  Checking with epsilon = " << buf << " ..." << std::flush;
   size_t errors = check(a, b, c, n);
+  if (errors)
+    std::cout << "  FAIL! (" << errors << " errors found)\n\n";
+  else
+    std::cout << "  pass\n\n";
+
   dealloc(a, b, c);
   if (showJSON)
     tg.json(std::cout);

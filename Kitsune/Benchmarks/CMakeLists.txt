@@ -9,3 +9,8 @@
 # endforeach ()
 
 add_subdirectory(vecadd)
+add_subdirectory(copy)
+add_subdirectory(saxpy)
+add_subdirectory(srad)
+# add_subdirectory(euler3d)
+add_subdirectory(raytracer)
