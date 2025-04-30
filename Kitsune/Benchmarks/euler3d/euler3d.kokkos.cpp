@@ -18,7 +18,7 @@ template <typename T>
 using DualView =
     Kokkos::DualView<T *, Kokkos::LayoutRight, Kokkos::DefaultExecutionSpace>;
 
-void cpy(const DualView<float> &dst_v, const DualView<float> &src_v, int n) {
+void cpy(DualView<float> &dst_v, DualView<float> &src_v, int n) {
   const auto &dst = dst_v.view_device();
   const auto &src = src_v.view_device();
 
@@ -33,8 +33,8 @@ void cpy(const DualView<float> &dst_v, const DualView<float> &src_v, int n) {
   dst_v.modify_device();
 }
 
-void initialize_variables(int nelr, const DualView<float> &variables_v,
-                          const DualView<float> &ff_variable_v) {
+void initialize_variables(int nelr, DualView<float> &variables_v,
+                          DualView<float> &ff_variable_v) {
   const auto &variables = variables_v.view_device();
   const auto &ff_variable = ff_variable_v.view_device();
 
@@ -47,7 +47,7 @@ void initialize_variables(int nelr, const DualView<float> &variables_v,
   });
   // clang-format on
   Kokkos::fence();
-  variables.modify_device();
+  variables_v.modify_device();
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
@@ -98,16 +98,16 @@ float compute_speed_of_sound(float density, float pressure) {
   return sqrtf(float(GAMMA) * pressure / density);
 }
 
-void compute_step_factor(int nelr, const DualView<float> &variables_v,
-                         const DualView<float> &areas_v,
+void compute_step_factor(int nelr, DualView<float> &variables_v,
+                         DualView<float> &areas_v,
                          DualView<float> &step_factors_v) {
   const auto &variables = variables_v.view_device();
-  const auto &areas_v = areas_v.view_device();
+  const auto &areas = areas_v.view_device();
   const auto &step_factors = step_factors_v.view_device();
 
-  variables.sync_device();
-  areas.sync_device();
-  step_factors.sync_device();
+  variables_v.sync_device();
+  areas_v.sync_device();
+  step_factors_v.sync_device();
 
   // clang-format off
   Kokkos::parallel_for(nelr / block_length, KOKKOS_LAMBDA(const size_t blk) {
@@ -139,14 +139,12 @@ void compute_step_factor(int nelr, const DualView<float> &variables_v,
   });
   // clang-format on
   Kokkos::fence();
-  step_factors.modify_device();
+  step_factors_v.modify_device();
 }
 
-void compute_flux(int nelr,
-                  const DualView<int> &elements_surrounding_elements_v,
-                  const DualView<float> &normals_v,
-                  const DualView<float> &variables_v, DualView<float> &fluxes_v,
-                  const DualView<float> &ff_variable_v,
+void compute_flux(int nelr, DualView<int> &elements_surrounding_elements_v,
+                  DualView<float> &normals_v, DualView<float> &variables_v,
+                  DualView<float> &fluxes_v, DualView<float> &ff_variable_v,
                   const Float3 ff_flux_contribution_momentum_x,
                   const Float3 ff_flux_contribution_momentum_y,
                   const Float3 ff_flux_contribution_momentum_z,
@@ -156,16 +154,16 @@ void compute_flux(int nelr,
   const auto &normals = normals_v.view_device();
   const auto &variables = variables_v.view_device();
   const auto &fluxes = fluxes_v.view_device();
-  const auto &ff_variable = ff_variables_v.view_device();
+  const auto &ff_variable = ff_variable_v.view_device();
 
   const float smoothing_coefficient = float(0.2f);
 
-  elements_surrounding_elements.sync_device();
-  normals.sync_device();
-  variables.sync_device();
-  fluxes.sync_device();
-  ff_variable.sync_device();
-  fluxes.modify_device();
+  elements_surrounding_elements_v.sync_device();
+  normals_v.sync_device();
+  variables_v.sync_device();
+  fluxes_v.sync_device();
+  ff_variable_v.sync_device();
+  fluxes_v.modify_device();
 
   // clang-format off
   Kokkos::parallel_for(nelr / block_length, KOKKOS_LAMBDA(const size_t blk) {
@@ -349,20 +347,19 @@ void compute_flux(int nelr,
   Kokkos::fence();
 }
 
-void time_step(int j, int nelr, const DualView<float> &old_variables_v,
-               const DualView<float> &variables_v,
-               const DualView<float> &step_factors_v,
-               const DualView<float> &fluxes_v) {
+void time_step(int j, int nelr, DualView<float> &old_variables_v,
+               DualView<float> &variables_v, DualView<float> &step_factors_v,
+               DualView<float> &fluxes_v) {
   const auto &old_variables = old_variables_v.view_device();
   const auto &variables = variables_v.view_device();
   const auto &step_factors = step_factors_v.view_device();
   const auto &fluxes = fluxes_v.view_device();
 
-  old_variables.sync_device();
-  variables.sync_device();
-  step_factors.sync_device();
-  fluxes.sync_device();
-  variables.modify_device();
+  old_variables_v.sync_device();
+  variables_v.sync_device();
+  step_factors_v.sync_device();
+  fluxes_v.sync_device();
+  variables_v.modify_device();
 
   // clang-format off
   Kokkos::parallel_for(nelr / block_length, KOKKOS_LAMBDA(const size_t blk) {
@@ -392,81 +389,215 @@ void time_step(int j, int nelr, const DualView<float> &old_variables_v,
   Kokkos::fence();
 }
 
-int main(int argc, char *argv[]) {
-  DualView<float> ff_variable;
-  DualView<float> areas;
-  DualView<int> elements_surrounding_elements;
-  DualView<float> normals;
-  DualView<float> variables;
-  DualView<float> old_variables;
-  DualView<float> fluxes;
-  DualView<float> step_factors;
-  int iterations;
-  int nel, nelr;
-  std::string domainFile;
-  std::string cpuRefFile, gpuRefFile;
-  std::string outFile;
-  Float3 ff_flux_contribution_momentum_x;
-  Float3 ff_flux_contribution_momentum_y;
-  Float3 ff_flux_contribution_momentum_z;
-  Float3 ff_flux_contribution_density_energy;
+// Specialize the read_domain because several of the views require "array"
+// accesses and it is too messy to ifdef them.
+template <>
+static void
+read_domain(DualView<float> &ff_variable_v, DualView<float> &areas_v,
+            DualView<int> &elements_surrounding_elements_v,
+            DualView<float> &normals_v, DualView<float> &variables_v,
+            DualView<float> &old_variables_v, DualView<float> &fluxes_v,
+            DualView<float> &step_factors_v,
+            Float3 &ff_flux_contribution_momentum_x,
+            Float3 &ff_flux_contribution_momentum_y,
+            Float3 &ff_flux_contribution_momentum_z,
+            Float3 &ff_flux_contribution_density_energy, int &nel, int &nelr,
+            const std::string &domainFile) {
+  // these need to be computed the first time in order to compute time step
+  ff_variable_v = DualView<float>("ff_variable", NVAR);
 
-  parseCommandLineInto(argc, argv, domainFile, iterations, outFile, cpuRefFile,
-                       gpuRefFile);
+  const auto &ff_variable = ff_variable_v.view_host();
 
-  TimerGroup tg("euler3d");
-  Timer &total = tg.add("total", "Total");
-  Timer &init = tg.add("init", "Init");
-  Timer &iters = tg.add("iters", "Compute");
-  Timer &copy = tg.add("copy", "Copy");
-  Timer &sf = tg.add("step_factor", "Step factor");
-  Timer &rk = tg.add("rk", "Runge-Kutta");
+  // set far field conditions
+  const float angle_of_attack =
+      float(3.1415926535897931 / 180.0f) * float(deg_angle_of_attack);
 
-  header("kokkos", domainFile, iterations);
+  ff_variable(VAR_DENSITY) = 1.4f;
+
+  float ff_pressure = 1.0f;
+  float ff_speed_of_sound =
+      sqrtf(GAMMA * ff_pressure / ff_variable(VAR_DENSITY));
+  float ff_speed = float(ff_mach) * ff_speed_of_sound;
+
+  Float3 ff_velocity;
+  ff_velocity.x = ff_speed * float(cos((float)angle_of_attack));
+  ff_velocity.y = ff_speed * float(sin((float)angle_of_attack));
+  ff_velocity.z = 0.0f;
+
+  ff_variable(VAR_MOMENTUM + 0) = ff_variable(VAR_DENSITY) * ff_velocity.x;
+  ff_variable(VAR_MOMENTUM + 1) = ff_variable(VAR_DENSITY) * ff_velocity.y;
+  ff_variable(VAR_MOMENTUM + 2) = ff_variable(VAR_DENSITY) * ff_velocity.z;
+
+  ff_variable(VAR_DENSITY_ENERGY) =
+      ff_variable(VAR_DENSITY) * (0.5f * (ff_speed * ff_speed)) +
+      (ff_pressure / float(GAMMA - 1.0f));
+
+  ff_variable_v.modify_host();
+
+  Float3 ff_momentum;
+  ff_momentum.x = ff_variable(VAR_MOMENTUM + 0);
+  ff_momentum.y = ff_variable(VAR_MOMENTUM + 1);
+  ff_momentum.z = ff_variable(VAR_MOMENTUM + 2);
+  compute_flux_contribution(
+      ff_variable(VAR_DENSITY), ff_momentum, ff_variable(VAR_DENSITY_ENERGY),
+      ff_pressure, ff_velocity, ff_flux_contribution_momentum_x,
+      ff_flux_contribution_momentum_y, ff_flux_contribution_momentum_z,
+      ff_flux_contribution_density_energy);
 
   // read in domain geometry
-  read_domain(ff_variable, areas, elements_surrounding_elements, normals,
-              variables, old_variables, fluxes, step_factors,
-              ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y,
-              ff_flux_contribution_momentum_z,
-              ff_flux_contribution_density_energy, nel, nelr, domainFile);
+  std::ifstream file(domainFile);
+  file >> nel;
+  nelr =
+      block_length * ((nel / block_length) + std::min(1, nel % block_length));
 
-  // Create arrays and set initial conditions
-  total.start();
-  init.start();
-  initialize_variables(nelr, variables, ff_variable);
-  init.stop();
+  alloc(ff_variable_v, areas_v, elements_surrounding_elements_v, normals_v,
+        variables_v, old_variables_v, fluxes_v, step_factors_v, nelr);
 
-  // Begin iterations
-  iters.start();
-  for (int i = 0; i < iterations; i++) {
-    copy.start();
-    cpy(old_variables, variables, nelr * NVAR);
-    copy.stop();
+  const auto &elements_surrounding_elements =
+      elements_surrounding_elements_v.view_host();
+  const auto &areas = areas_v.view_host();
+  const auto &normals = normals_v.view_host();
 
-    // for the first iteration we compute the time step
-    sf.start();
-    compute_step_factor(nelr, variables, areas, step_factors);
-    sf.stop();
+  // read in data
+  for (int i = 0; i < nel; i++) {
+    file >> areas[i];
+    for (int j = 0; j < NNB; j++) {
+      file >> elements_surrounding_elements(i + j * nelr);
+      if (elements_surrounding_elements(i + j * nelr) < 0)
+        elements_surrounding_elements(i + j * nelr) = -1;
+      // it's coming in with Fortran numbering
+      elements_surrounding_elements(i + j * nelr)--;
 
-    rk.start();
-    for (int j = 0; j < RK; j++) {
-      compute_flux(nelr, elements_surrounding_elements, normals, variables,
-                   fluxes, ff_variable, ff_flux_contribution_momentum_x,
-                   ff_flux_contribution_momentum_y,
-                   ff_flux_contribution_momentum_z,
-                   ff_flux_contribution_density_energy);
-      time_step(j, nelr, old_variables, variables, step_factors, fluxes);
+      for (int k = 0; k < NDIM; k++) {
+        file >> normals[i + (j + k * NNB) * nelr];
+        normals(i + (j + k * NNB) * nelr) = -normals(i + (j + k * NNB) * nelr);
+      }
     }
-    rk.stop();
   }
-  iters.stop();
-  total.stop();
+  areas_v.modify_host();
+  normals_v.modify_host();
+  elements_surrounding_elements_v.modify_host();
 
-  // ok will be true (non-zero) on success. But the OS needs 0 to indicate
-  // success.
-  bool ok = footer(tg, ff_variable, areas, elements_surrounding_elements,
-                   normals, variables, old_variables, fluxes, step_factors, nel,
-                   nelr, outFile, cpuRefFile, gpuRefFile);
+  // fill in remaining data
+  int last = nel - 1;
+  for (int i = nel; i < nelr; i++) {
+    areas[i] = areas[last];
+    for (int j = 0; j < NNB; j++) {
+      // duplicate the last element
+      elements_surrounding_elements(i + j * nelr) =
+          elements_surrounding_elements(last + j * nelr);
+      for (int k = 0; k < NDIM; k++)
+        normals(i + (j + k * NNB) * nelr) =
+            normals(last + (j + k * NNB) * nelr);
+    }
+  }
+  areas_v.modify_host();
+  normals_v.modify_host();
+  elements_surrounding_elements_v.modify_host();
+
+  std::cout << "  done.\n\n";
+  std::cout << "  Starting benchmark ... " << std::flush;
+}
+
+template <>
+static void save(const std::string &out_file, DualView<float> &variables_v,
+                 int nel, int nelr) {
+  const auto &variables = variables_v.view_host();
+  FILE *fp = fopen(out_file.c_str(), "wb");
+  char type;
+
+  fwrite(&nel, sizeof(int), 1, fp);
+  fwrite(&nelr, sizeof(int), 1, fp);
+  fwrite(&variables(VAR_DENSITY * nelr), sizeof(float), nel, fp);
+  for (int j = 0; j < NDIM; j++)
+    fwrite(&variables((VAR_MOMENTUM + j) * nelr), sizeof(float), nel, fp);
+  fwrite(&variables(VAR_DENSITY_ENERGY * nelr), sizeof(float), nel, fp);
+
+  fclose(fp);
+}
+
+int main(int argc, char *argv[]) {
+  bool ok;
+  Kokkos::initialize(argc, argv);
+  {
+    DualView<float> ff_variable;
+    DualView<float> areas;
+    DualView<int> elements_surrounding_elements;
+    DualView<float> normals;
+    DualView<float> variables;
+    DualView<float> old_variables;
+    DualView<float> fluxes;
+    DualView<float> step_factors;
+    int iterations;
+    int nel, nelr;
+    std::string domainFile;
+    std::string cpuRefFile, gpuRefFile;
+    std::string outFile;
+    Float3 ff_flux_contribution_momentum_x;
+    Float3 ff_flux_contribution_momentum_y;
+    Float3 ff_flux_contribution_momentum_z;
+    Float3 ff_flux_contribution_density_energy;
+
+    parseCommandLineInto(argc, argv, domainFile, iterations, outFile,
+                         cpuRefFile, gpuRefFile);
+
+    TimerGroup tg("euler3d");
+    Timer &total = tg.add("total", "Total");
+    Timer &init = tg.add("init", "Init");
+    Timer &iters = tg.add("iters", "Compute");
+    Timer &copy = tg.add("copy", "Copy");
+    Timer &sf = tg.add("step_factor", "Step factor");
+    Timer &rk = tg.add("rk", "Runge-Kutta");
+
+    header("kokkos", domainFile, iterations);
+
+    // read in domain geometry
+    read_domain(
+        ff_variable, areas, elements_surrounding_elements, normals, variables,
+        old_variables, fluxes, step_factors, ff_flux_contribution_momentum_x,
+        ff_flux_contribution_momentum_y, ff_flux_contribution_momentum_z,
+        ff_flux_contribution_density_energy, nel, nelr, domainFile);
+
+    // Create arrays and set initial conditions
+    total.start();
+    init.start();
+    initialize_variables(nelr, variables, ff_variable);
+    init.stop();
+
+    // Begin iterations
+    iters.start();
+    for (int i = 0; i < iterations; i++) {
+      copy.start();
+      cpy(old_variables, variables, nelr * NVAR);
+      copy.stop();
+
+      // for the first iteration we compute the time step
+      sf.start();
+      compute_step_factor(nelr, variables, areas, step_factors);
+      sf.stop();
+
+      rk.start();
+      for (int j = 0; j < RK; j++) {
+        compute_flux(nelr, elements_surrounding_elements, normals, variables,
+                     fluxes, ff_variable, ff_flux_contribution_momentum_x,
+                     ff_flux_contribution_momentum_y,
+                     ff_flux_contribution_momentum_z,
+                     ff_flux_contribution_density_energy);
+        time_step(j, nelr, old_variables, variables, step_factors, fluxes);
+      }
+      rk.stop();
+    }
+    iters.stop();
+    total.stop();
+    variables.sync_host();
+
+    // ok will be true (non-zero) on success. But the OS needs 0 to indicate
+    // success.
+    ok = footer(tg, ff_variable, areas, elements_surrounding_elements, normals,
+                variables, old_variables, fluxes, step_factors, nel, nelr,
+                outFile, cpuRefFile, gpuRefFile);
+  }
+  Kokkos::finalize();
+
   return !ok;
 }

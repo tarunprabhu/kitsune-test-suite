@@ -10,12 +10,14 @@ import sys
 # The regular expression to extract the name of the test and the tapir target
 # from the name of the test script file. The name of the test is the first
 # match, the tapir target is the third.
-re_kit_test = re.compile('^(.+?)-(c|cxx|fortran|kokkos)-(.+?)[.]test$')
+re_kit_test = re.compile('^(.+?)-(c|cxx|fortran|kokkos|unknown)-(.+?)[.]test$')
 
 # The result expression to extract the name of the test and the language from
 # name of the test script file. This name of the language is guaranteed to be
 # either culang or hiplang.
-re_vanilla_test = re.compile('^(.+)-(cuda|hip|kokkos-nvidia|kokkos-amd)[.]test$')
+re_vanilla_test = re.compile(
+    '^(.+)-(nvcc|hipcc|kokkos-nvidia|kokkos-amd)[.]test$'
+)
 
 # Get the test name. The argument is a path to a .test file. In the case of a
 # Benchmark or MultiSource test, the test name will be the name of the directory
@@ -49,7 +51,7 @@ def get_tapir_target(base: str) -> str:
     m = re_kit_test.match(b)
     if not m:
         sys.exit(f'Could not get tapir target: {base}')
-    if m[2] == 'kokkos-kit':
+    if m[2] == 'kokkos':
         return 'kokkos-' + m[3]
     return m[3]
 
@@ -63,30 +65,42 @@ def get_tapir_target_or_lang(base: str) -> str:
     m = re_vanilla_test.match(b)
     if not m:
         return get_tapir_target(base)
-    elif m[2] in ['cuda', 'hip', 'kokkos-nvidia', 'kokkos-amd']:
-        return 'vanilla-' + m[2]
+    elif m[2] in ['nvcc', 'hipcc', 'kokkos-nvidia', 'kokkos-amd']:
+        return m[2]
     else:
         sys.exit(f'Could not get tapir target or language: {base}')
 
-# Get the compile time. For now, this only works for single-source tests.
-def get_compile_time(build_dir: str, base: str) -> int:
+# Get the directory containing the object and timing files for a test with the
+# given base name.
+def get_objdir(build_dir: str, base: str) -> str:
     d = os.path.dirname(os.path.join(build_dir, base))
     b = re.sub('[.]test$', '', os.path.basename(base))
-    objdir = os.path.join(d, 'CMakeFiles', b + '.dir')
 
-    # Only return a time if there is a single timing file in the directory.
-    # This will be the case of single-source tests. For multi-source tests,
-    # there is currently no good way to determine the timing of the whole test.
+    return os.path.join(d, 'CMakeFiles', b + '.dir')
+
+# Get the total number of object files found for a test.
+def get_num_object_files(build_dir: str, base: str) -> int:
+    objdir = get_objdir(build_dir, base)
+    return len([f for f in os.listdir(objdir) if f.endswith('.o.time')])
+
+# Get the total compile time for all object files that are found. This is not
+# likely to be the wall-clock time observed by the user since the object files
+# could have been compiled in parallel.
+def get_compile_time(build_dir: str, base: str) -> int:
+    objdir = get_objdir(build_dir, base)
     time = 0.0
     files = [f for f in os.listdir(objdir) if f.endswith('.o.time')]
-    if len(files) == 1:
-        with open(os.path.join(objdir, files[0]), 'r') as f:
-            for line in f:
-                if line.startswith('real'):
-                    time = float(line.split(' ')[-1].strip())
-    # The time is recorded in seconds. But the per-kernel timings are in
-    # microseconds. To keep things consistent, report this in microseconds
-    return math.ceil(time * 1000000)
+    if files:
+        for filename in files:
+            with open(os.path.join(objdir, filename), 'r') as f:
+                for line in f:
+                    if line.startswith('real'):
+                        time += float(line.split(' ')[-1].strip())
+        # The time is recorded in seconds. But the per-kernel timings are in
+        # microseconds. To keep things consistent, report this in microseconds
+        return math.ceil(time * 1000000)
+    else:
+        return -1
 
 # Get the link time.
 def get_link_time(build_dir: str, base: str) -> int:
@@ -142,6 +156,15 @@ def process(report_file: str, build_dir: str):
         with open(platform, 'r') as f:
             combined = json.load(f)
 
+    # We cannot have comments in a JSON file, but having notes in it is useful.
+    combined['notes'] = [
+        '1. All times are in microseconds',
+        '2. Executable sizes are in bytes',
+        '3. If a compile/link time could not be determined, it is -1',
+        '4. For now, we cannot get compile and link times when using '
+        'nvcc/hipcc. Neither can we collect the number of object files'
+    ]
+
     combined['targets'] = []
     combined['tests'] = {}
 
@@ -164,17 +187,9 @@ def process(report_file: str, build_dir: str):
 
         # We can't use the compile and link times from the main report because
         # the values there are determined by looking for timing files that have
-        # a prefix that matches the test name. Because we compile the same
-        # source file multiple times with different tapir targets, the names of
-        # the timing files generally will not match. We can only get reasonable
-        # compile times for single-source files because the test suite will
-        # build everything in parallel and may simultaneously build object files
-        # for unrelated tests. Simply adding up the times for each object file
-        # in a multi-source file will not give an accurate value for the
-        # compile time.
-        # TODO: We could get a reasonable value for the link time of a
-        # multi-source test, so we should do that at some point.
-        data['source'] = base
+        # a prefix that matches the test name.
+        data['test'] = base
+        data['object-files'] = get_num_object_files(build_dir, base)
         data['compile-time'] = get_compile_time(build_dir, base)
         data['link-time'] = get_link_time(build_dir, base)
         data['size'] = test['metrics']['size']
@@ -227,7 +242,7 @@ def parse_command_line_args():
         help = 'Write the combined report to a file instead of stdout'
     )
     parser.add_argument(
-        '-b'
+        '-b',
         '--build-dir',
         type = str,
         default = None,
@@ -260,7 +275,7 @@ def main():
         build_dir = os.path.dirname(os.path.dirname(args.report))
 
     combined = process(args.report, build_dir)
-    pretty = json.dumps(combined, sort_keys=False, indent=2)
+    pretty = json.dumps(combined, sort_keys = False, indent = 2)
     if args.outfile:
         with open(args.outfile, 'w') as f:
             f.write(pretty)

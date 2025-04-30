@@ -115,14 +115,14 @@ static void alloc(FArr &ff_variable, FArr &areas,
                   FArr &variables, FArr &old_variables, FArr &fluxes,
                   FArr &step_factors, int nelr) {
 #if defined(__KOKKOS__)
-  areas = DualView<float>("areas", nelr);
+  areas = FArr("areas", nelr);
   elements_surrounding_elements =
-      DualView<int>("elements_surrounding_elements", nelr * NNB);
-  normals = DualView<float>("normals", NDIM * NNB * nelr);
-  variables = DualView<float>("variables", nelr * NVAR);
-  old_variables = DualView<float>("old_variables", nelr * NVAR);
-  fluxes = DualView<float>("fluxes", nelr * NVAR);
-  step_factors = DualView<float>("step_factors", nelr);
+      IArr("elements_surrounding_elements", nelr * NNB);
+  normals = FArr("normals", NDIM * NNB * nelr);
+  variables = FArr("variables", nelr * NVAR);
+  old_variables = FArr("old_variables", nelr * NVAR);
+  fluxes = FArr("fluxes", nelr * NVAR);
+  step_factors = FArr("step_factors", nelr);
 #elif defined(__CUDACC__)
   cudaMallocManaged(&areas, nelr * sizeof(float));
   cudaMallocManaged(&elements_surrounding_elements, nelr * NNB * sizeof(int));

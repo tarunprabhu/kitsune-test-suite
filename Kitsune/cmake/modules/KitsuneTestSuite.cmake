@@ -137,9 +137,11 @@ endfunction()
 function (kit_singlesource_test source lang tapir_target cmdargs)
   get_filename_component(base "${source}" NAME_WE)
   if (tapir_target STREQUAL "none")
-    if (lang STREQUAL "cuda" OR
-        lang STREQUAL "hip" OR
-        lang STREQUAL "kokkos-nvidia" OR
+    if (lang STREQUAL "cuda")
+      set(target ${base}-nvcc)
+    elseif (lang STREQUAL "hip")
+      set(target ${base}-hipcc)
+    elseif (lang STREQUAL "kokkos-nvidia" OR
         lang STREQUAL "kokkos-amd")
       set(target ${base}-${lang})
     else ()
@@ -351,9 +353,9 @@ endfunction()
 macro(make_target base type tapir_target kokkos out)
   set(target)
   if (kokkos)
-    set(target "${base}-kitkokkos-${tapir_target}")
+    set(target "${base}-kokkos-${tapir_target}")
   else ()
-    set(target "${base}-${tapir_target}")
+    set(target "${base}-unknown-${tapir_target}")
   endif ()
 
   if (type STREQUAL "EXECUTABLE")
@@ -435,7 +437,6 @@ endmacro ()
 #
 function (kitsune_multisource base out)
   cmake_parse_arguments(KIT "EXECUTABLE;SHARED;STATIC;KOKKOS" "" "CMDARGS;DATA" ${ARGN})
-  set(base "${base}-kit")
   set(cmdargs "${KIT_CMDARGS}")
   set(data "${KIT_DATA}")
 

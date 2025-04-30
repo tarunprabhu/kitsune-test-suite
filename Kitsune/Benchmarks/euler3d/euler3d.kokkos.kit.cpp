@@ -387,80 +387,86 @@ void time_step(int j, int nelr, kitsune::mobile_ptr<float> old_variables_p,
 }
 
 int main(int argc, char *argv[]) {
-  kitsune::mobile_ptr<float> ff_variable;
-  kitsune::mobile_ptr<float> areas;
-  kitsune::mobile_ptr<int> elements_surrounding_elements;
-  kitsune::mobile_ptr<float> normals;
-  kitsune::mobile_ptr<float> variables;
-  kitsune::mobile_ptr<float> old_variables;
-  kitsune::mobile_ptr<float> fluxes;
-  kitsune::mobile_ptr<float> step_factors;
-  int iterations;
-  int nel, nelr;
-  std::string domainFile;
-  std::string cpuRefFile, gpuRefFile;
-  std::string outFile;
-  Float3 ff_flux_contribution_momentum_x;
-  Float3 ff_flux_contribution_momentum_y;
-  Float3 ff_flux_contribution_momentum_z;
-  Float3 ff_flux_contribution_density_energy;
+  bool ok;
+  Kokkos::initialize(argc, argv);
+  {
+    kitsune::mobile_ptr<float> ff_variable;
+    kitsune::mobile_ptr<float> areas;
+    kitsune::mobile_ptr<int> elements_surrounding_elements;
+    kitsune::mobile_ptr<float> normals;
+    kitsune::mobile_ptr<float> variables;
+    kitsune::mobile_ptr<float> old_variables;
+    kitsune::mobile_ptr<float> fluxes;
+    kitsune::mobile_ptr<float> step_factors;
+    int iterations;
+    int nel, nelr;
+    std::string domainFile;
+    std::string cpuRefFile, gpuRefFile;
+    std::string outFile;
+    Float3 ff_flux_contribution_momentum_x;
+    Float3 ff_flux_contribution_momentum_y;
+    Float3 ff_flux_contribution_momentum_z;
+    Float3 ff_flux_contribution_density_energy;
 
-  parseCommandLineInto(argc, argv, domainFile, iterations, outFile, cpuRefFile,
-                       gpuRefFile);
+    parseCommandLineInto(argc, argv, domainFile, iterations, outFile,
+                         cpuRefFile, gpuRefFile);
 
-  TimerGroup tg("euler3d");
-  Timer &total = tg.add("total", "Total");
-  Timer &init = tg.add("init", "Init");
-  Timer &iters = tg.add("iters", "Compute");
-  Timer &copy = tg.add("copy", "Copy");
-  Timer &sf = tg.add("step_factor", "Step factor");
-  Timer &rk = tg.add("rk", "Runge-Kutta");
+    TimerGroup tg("euler3d");
+    Timer &total = tg.add("total", "Total");
+    Timer &init = tg.add("init", "Init");
+    Timer &iters = tg.add("iters", "Compute");
+    Timer &copy = tg.add("copy", "Copy");
+    Timer &sf = tg.add("step_factor", "Step factor");
+    Timer &rk = tg.add("rk", "Runge-Kutta");
 
-  header("kokkos", domainFile, iterations);
+    header("kokkos", domainFile, iterations);
 
-  // read in domain geometry
-  read_domain(ff_variable, areas, elements_surrounding_elements, normals,
-              variables, old_variables, fluxes, step_factors,
-              ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y,
-              ff_flux_contribution_momentum_z,
-              ff_flux_contribution_density_energy, nel, nelr, domainFile);
+    // read in domain geometry
+    read_domain(
+        ff_variable, areas, elements_surrounding_elements, normals, variables,
+        old_variables, fluxes, step_factors, ff_flux_contribution_momentum_x,
+        ff_flux_contribution_momentum_y, ff_flux_contribution_momentum_z,
+        ff_flux_contribution_density_energy, nel, nelr, domainFile);
 
-  // Create arrays and set initial conditions
-  total.start();
-  init.start();
-  initialize_variables(nelr, variables, ff_variable);
-  init.stop();
+    // Create arrays and set initial conditions
+    total.start();
+    init.start();
+    initialize_variables(nelr, variables, ff_variable);
+    init.stop();
 
-  // Begin iterations
-  iters.start();
-  for (int i = 0; i < iterations; i++) {
-    copy.start();
-    cpy(old_variables, variables, nelr * NVAR);
-    copy.stop();
+    // Begin iterations
+    iters.start();
+    for (int i = 0; i < iterations; i++) {
+      copy.start();
+      cpy(old_variables, variables, nelr * NVAR);
+      copy.stop();
 
-    // for the first iteration we compute the time step
-    sf.start();
-    compute_step_factor(nelr, variables, areas, step_factors);
-    sf.stop();
+      // for the first iteration we compute the time step
+      sf.start();
+      compute_step_factor(nelr, variables, areas, step_factors);
+      sf.stop();
 
-    rk.start();
-    for (int j = 0; j < RK; j++) {
-      compute_flux(nelr, elements_surrounding_elements, normals, variables,
-                   fluxes, ff_variable, ff_flux_contribution_momentum_x,
-                   ff_flux_contribution_momentum_y,
-                   ff_flux_contribution_momentum_z,
-                   ff_flux_contribution_density_energy);
-      time_step(j, nelr, old_variables, variables, step_factors, fluxes);
+      rk.start();
+      for (int j = 0; j < RK; j++) {
+        compute_flux(nelr, elements_surrounding_elements, normals, variables,
+                     fluxes, ff_variable, ff_flux_contribution_momentum_x,
+                     ff_flux_contribution_momentum_y,
+                     ff_flux_contribution_momentum_z,
+                     ff_flux_contribution_density_energy);
+        time_step(j, nelr, old_variables, variables, step_factors, fluxes);
+      }
+      rk.stop();
     }
-    rk.stop();
-  }
-  iters.stop();
-  total.stop();
+    iters.stop();
+    total.stop();
 
-  // ok will be true (non-zero) on success. But the OS needs 0 to indicate
-  // success.
-  bool ok = footer(tg, ff_variable, areas, elements_surrounding_elements,
-                   normals, variables, old_variables, fluxes, step_factors, nel,
-                   nelr, outFile, cpuRefFile, gpuRefFile);
+    // ok will be true (non-zero) on success. But the OS needs 0 to indicate
+    // success.
+    ok = footer(tg, ff_variable, areas, elements_surrounding_elements, normals,
+                variables, old_variables, fluxes, step_factors, nel, nelr,
+                outFile, cpuRefFile, gpuRefFile);
+  }
+  Kokkos::finalize();
+
   return !ok;
 }

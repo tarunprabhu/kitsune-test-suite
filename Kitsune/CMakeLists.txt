@@ -429,9 +429,7 @@ if (TEST_CUDA_TARGET AND KITSUNE_BENCHMARK)
 endif ()
 
 # See the comments for the cuda language tests above. Same goes for hip.
-# FIXME: Temporarily always test vanilla hip.
-# if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
-if (TEST_HIP_TARGET)
+if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
   set(TEST_VANILLA_HIP ON)
 
   # We could use clang to compile the .hip files, but since this is only useful
@@ -457,7 +455,7 @@ if (TEST_HIP_TARGET)
   # to set $PATH to the directory containing hipcc just to let cmake find the
   # right one, then restore $PATH.
   set(PATH $ENV{PATH})
-  set(ENV{PATH} "${HIP_PREFIX}/bin")
+  set(ENV{PATH} "${HIP_PREFIX}/bin:${PATH}")
   enable_language(HIP)
   set(ENV{PATH} "${PATH}")
 endif ()
@@ -465,11 +463,7 @@ endif ()
 # Similar to Cuda and Hip, we may also want to check the .kokkos.cpp files with
 # a regular C++ compiler for performance checks. These are only useful when
 # doing performance comparisons.
-#
-# FIXME: Temporarily always test vanilla kokkos while we automate setting up
-# Kokkos etc.
-# if (TEST_KOKKOS_MODE AND KITSUNE_BENCHMARK)
-if (TEST_KOKKOS_MODE)
+if (TEST_KOKKOS_MODE AND KITSUNE_BENCHMARK)
   if (TEST_VANILLA_CUDA)
     set(TEST_VANILLA_KOKKOS_CUDA ON)
     if (NOT KOKKOS_CUDA_PREFIX)
@@ -493,8 +487,15 @@ endif ()
 remove_definitions(-Werror=date-time)
 
 add_subdirectory(Benchmarks)
-add_subdirectory(SingleSource)
-add_subdirectory(MultiSource)
+
+# The single-source tests in particular are only intended for correctness. They
+# are generally very small and there is nothing to be gained when running them
+# during benchmarking. It is possible that we could do some benchmarking with
+# the multisource tests at some point, but for now, we don't.
+if (NOT KITSUNE_BENCHMARK)
+  add_subdirectory(SingleSource)
+  add_subdirectory(MultiSource)
+endif ()
 
 add_subdirectory(utils)
 

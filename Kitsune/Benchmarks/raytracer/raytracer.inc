@@ -170,11 +170,9 @@ static void header(const std::string &label, Img &img, RawImg &rawImg,
   std::cout << "  Running benchmark ... " << std::flush;
 }
 
-// FIXME: It is absolutely ridiculous that the epsilon here is so large (it
-// used to be 10 which was horrific enough, but when compiling with Kokkos on
-// AMD, even 10 is not sufficient. The image itself looks reasonable even with
-// this enormous epsilon, which is even more infuriating). The code itself seems
-// to be incredibly unstable, but that isn't really saying a lot.
+// FIXME: It is absolutely ridiculous that the epsilon here is so large. It used
+// to be 10 which was bad enough, but when compiling with Kokkos on AMD, even
+// that is not sufficient. The image looks reasonable though.
 static constexpr float epsilon = 10000;
 
 // If there is a mismatch in the output, return the number of mismatches. If the
