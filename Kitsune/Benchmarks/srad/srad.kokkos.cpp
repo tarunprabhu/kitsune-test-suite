@@ -16,7 +16,7 @@ using DualViewFloat = Kokkos::DualView<float *, Kokkos::LayoutRight,
 using DualViewInt =
     Kokkos::DualView<int *, Kokkos::LayoutRight, Kokkos::DefaultExecutionSpace>;
 
-template <> static void randomFill(DualViewFloat &vwI, int rows, int cols) {
+template <> void randomFill(DualViewFloat &vwI, int rows, int cols) {
   const auto &I = vwI.view_host();
   for (int i = 0; i < rows; i++) {
     for (int j = 0; j < cols; j++) {

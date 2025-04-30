@@ -11,7 +11,7 @@
 using DualView = Kokkos::DualView<ElementType *, Kokkos::LayoutRight,
                                   Kokkos::DefaultExecutionSpace>;
 
-template <> static void randomFill<>(DualView &vwa, size_t n) {
+template <> void randomFill<>(DualView &vwa, size_t n) {
   const auto &arr = vwa.view_host();
   for (size_t i = 0; i < n; ++i) {
     arr(i) = rand() / ElementType(RAND_MAX);
@@ -19,8 +19,8 @@ template <> static void randomFill<>(DualView &vwa, size_t n) {
 }
 
 template <>
-static size_t check(const DualView &vwx, const DualView &vwy,
-                    const DualView &vwr, size_t n) {
+size_t check(const DualView &vwx, const DualView &vwy, const DualView &vwr,
+             size_t n) {
   const auto &r = vwr.view_host();
   const auto &x = vwx.view_host();
   const auto &y = vwy.view_host();

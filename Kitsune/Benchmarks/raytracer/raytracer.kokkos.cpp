@@ -41,8 +41,8 @@ struct Vec {
 #include "raytracer.inc"
 
 template <>
-static void saveImage(const DualViewPixel &img, unsigned imageWidth,
-                      unsigned imageHeight, const std::string &imgFile) {
+void saveImage(const DualViewPixel &img, unsigned imageWidth,
+               unsigned imageHeight, const std::string &imgFile) {
   std::cout << "  Saving image ... " << std::flush;
   std::ofstream of(imgFile);
   if (of.is_open()) {
@@ -59,8 +59,8 @@ static void saveImage(const DualViewPixel &img, unsigned imageWidth,
 }
 
 template <>
-static void saveRaw(const DualViewVec &rawImg, unsigned imageWidth,
-                    unsigned imageHeight, const std::string &outFile) {
+void saveRaw(const DualViewVec &rawImg, unsigned imageWidth,
+             unsigned imageHeight, const std::string &outFile) {
   FILE *fp = fopen(outFile.c_str(), "wb");
   fwrite(&imageWidth, sizeof(unsigned), 1, fp);
   fwrite(&imageHeight, sizeof(unsigned), 1, fp);

@@ -392,17 +392,16 @@ void time_step(int j, int nelr, DualView<float> &old_variables_v,
 // Specialize the read_domain because several of the views require "array"
 // accesses and it is too messy to ifdef them.
 template <>
-static void
-read_domain(DualView<float> &ff_variable_v, DualView<float> &areas_v,
-            DualView<int> &elements_surrounding_elements_v,
-            DualView<float> &normals_v, DualView<float> &variables_v,
-            DualView<float> &old_variables_v, DualView<float> &fluxes_v,
-            DualView<float> &step_factors_v,
-            Float3 &ff_flux_contribution_momentum_x,
-            Float3 &ff_flux_contribution_momentum_y,
-            Float3 &ff_flux_contribution_momentum_z,
-            Float3 &ff_flux_contribution_density_energy, int &nel, int &nelr,
-            const std::string &domainFile) {
+void read_domain(DualView<float> &ff_variable_v, DualView<float> &areas_v,
+                 DualView<int> &elements_surrounding_elements_v,
+                 DualView<float> &normals_v, DualView<float> &variables_v,
+                 DualView<float> &old_variables_v, DualView<float> &fluxes_v,
+                 DualView<float> &step_factors_v,
+                 Float3 &ff_flux_contribution_momentum_x,
+                 Float3 &ff_flux_contribution_momentum_y,
+                 Float3 &ff_flux_contribution_momentum_z,
+                 Float3 &ff_flux_contribution_density_energy, int &nel,
+                 int &nelr, const std::string &domainFile) {
   // these need to be computed the first time in order to compute time step
   ff_variable_v = DualView<float>("ff_variable", NVAR);
 
@@ -500,8 +499,8 @@ read_domain(DualView<float> &ff_variable_v, DualView<float> &areas_v,
 }
 
 template <>
-static void save(const std::string &out_file, DualView<float> &variables_v,
-                 int nel, int nelr) {
+void save(const std::string &out_file, DualView<float> &variables_v, int nel,
+          int nelr) {
   const auto &variables = variables_v.view_host();
   FILE *fp = fopen(out_file.c_str(), "wb");
   char type;

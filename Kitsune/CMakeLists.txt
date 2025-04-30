@@ -25,16 +25,6 @@ set(KITSUNE_SKIP_TAPIR_TARGETS "" CACHE STRING
   "A semicolon-separated list of tapir targets to skip. Each element of this \
 list must be a value that can be passed to the --tapir= option of the frontend")
 
-set(KITSUNE_CUDA_ARCH "" CACHE STRING
-  "Kitsune can only compile for a single GPU, and must be given the GPU \
-architecture if Kitsune's default is not suitable. This simply adds the \
---tapir-cuda-arch= option when building with the 'cuda' tapir target")
-
-set(KITSUNE_HIP_ARCH "" CACHE STRING
-  "Kitsune can only compile for a single GPU, and must be given the GPU \
-architecture if Kitsune's default is not suitable. This simply adds the \
---tapir-hip-arch= option when building with the 'hip' tapir target")
-
 set(KITSUNE_FLAGS_EXTRA "" CACHE STRING
   "Additional options to pass to all Kitsune frontends")
 
@@ -126,8 +116,12 @@ if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
 endif ()
 string(TOUPPER "${CMAKE_BUILD_TYPE}" BUILD_CONFIG)
 
-# Grep is needed to check if a test passed or failed.
+# Grep is needed to check if a test passed or failed. The other utilities are
+# needed to determine the unique GPU on the machine. These should be present on
+# platforms that we care about, but just in case, make sure that we find them.
 find_program(GREP grep REQUIRED)
+find_program(SORT sort REQUIRED)
+find_program(UNIQ uniq REQUIRED)
 
 # The top-level CMakeLists.txt will have set the C and CXX languages which means
 # the C and C++ compilers will already have been set. If the compilers are
@@ -330,7 +324,7 @@ endforeach ()
 foreach (tapir_target ${TEST_TAPIR_TARGETS})
   if (tapir_target STREQUAL "cuda")
     # If the cuda target has been built, but the device on which this is run
-    # does not have an NVIDIA GPU. In this case, skip the cuda target.
+    # does not have an NVIDIA GPU, skip the cuda target.
     #
     # nvptx-arch is guaranteed to be built when Kitsune is built, so use that
     # to determine if an NVIDIA GPU is present.
@@ -339,19 +333,30 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
       NO_DEFAULT_PATH)
 
     execute_process(COMMAND "${NVPTX_ARCH}"
+      COMMAND ${SORT}
+      COMMAND ${UNIQ}
       OUTPUT_VARIABLE NVPTX_ARCHS
+      OUTPUT_STRIP_TRAILING_WHITESPACE
       ERROR_QUIET)
+    string(REPLACE "\n" ";" NVPTX_ARCHS "${NVPTX_ARCHS}")
+    list(LENGTH NVPTX_ARCHS NUM_NVIDIA_GPUS)
 
-    if (NVPTX_ARCHS)
-      set(TEST_CUDA_TARGET ON)
+    if (NUM_NVIDIA_GPUS EQUAL 1)
+      list(GET NVPTX_ARCHS 0 NVIDIA_ARCH)
+      message(STATUS "NVIDIA GPU found: ${NVIDIA_ARCH}")
       message(STATUS "Testing tapir target: cuda")
-    else ()
-      set(TEST_CUDA_TARGET OFF)
+      set(TEST_CUDA_TARGET ON)
+    elseif (NUM_NVIDIA_GPUS EQUAL 0)
       message(WARNING "No NVIDIA GPU's found! Skipping tapir target: cuda")
+      set(TEST_CUDA_TARGET OFF)
+    else ()
+      message(WARNING "NVIDIA GPU's with different architectures found: \
+'${NVPTX_ARCHS}'! Skipping tapir target: cuda")
+      set(TEST_CUDA_TARGET OFF)
     endif ()
   elseif (tapir_target STREQUAL "hip")
     # If the cuda target has been built, but the device on which this is run
-    # does not have an AMD GPU. In this case, skip the hip target.
+    # does not have an AMD GPU, skip the hip target.
     #
     # amdgpu-arch is guaranteed to be built when Kitsune is built, so use that
     # to determine if an AMD GPU is present.
@@ -360,15 +365,26 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
       NO_DEFAULT_PATH)
 
     execute_process(COMMAND "${AMDGPU_ARCH}"
+      COMMAND ${SORT}
+      COMMAND ${UNIQ}
       OUTPUT_VARIABLE AMDGPU_ARCHS
+      OUTPUT_STRIP_TRAILING_WHITESPACE
       ERROR_QUIET)
+    string(REPLACE "\n" ";" AMDGPU_ARCHS "${AMDGPU_ARCHS}")
+    list(LENGTH AMDGPU_ARCHS NUM_AMD_GPUS)
 
-    if (AMDGPU_ARCHS)
-      set(TEST_HIP_TARGET ON)
+    if (NUM_AMD_GPUS EQUAL 1)
+      list(GET AMDGPU_ARCHS 0 AMD_ARCH)
+      message(STATUS "AMD GPU found: ${AMD_ARCH}")
       message(STATUS "Testing tapir target: hip")
-    else ()
-      set(TEST_HIP_TARGET OFF)
+      set(TEST_HIP_TARGET ON)
+    elseif (NUM_AMD_GPUS EQUAL 0)
       message(WARNING "No AMD GPU's found! Skipping tapir target: hip")
+      set(TEST_HIP_TARGET OFF)
+    else ()
+      message(WARNING "AMD GPU's with different architectures found: \
+'${AMDGPU_ARCHS}'! Skipping tapir target: hip")
+      set(TEST_HIP_TARGET OFF)
     endif ()
   elseif (tapir_target STREQUAL "lambda")
     set(TEST_LAMBDA_TARGET ON)
@@ -389,8 +405,17 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
     set(TEST_REALM_TARGET ON)
     message(STATUS "Testing tapir target: ${tapir_target}")
   elseif (tapir_target STREQUAL "serial")
-    set(TEST_SERIAL_TARGET ON)
-    message(STATUS "Testing tapir target: ${tapir_target}")
+    # We never want to test the serial tapir target when in benchmarking mode.
+    # The benchmarks are all built to test problem sizes that benefit from
+    # parallel execution. The code produced by the serial tapir target is far,
+    # far too slow in such cases.
+    if (KITSUNE_BENCHMARK)
+      set(TEST_SERIAL_TARGET OFF)
+      message(STATUS "Skipping tapir target when benchmarking: serial")
+    else ()
+      set(TEST_SERIAL_TARGET ON)
+      message(STATUS "Testing tapir target: ${tapir_target}")
+    endif ()
   else ()
     message(FATAL_ERROR "Unknown tapir target: ${tapir_target}")
   endif ()
@@ -424,8 +449,32 @@ if (TEST_CUDA_TARGET AND KITSUNE_BENCHMARK)
     PATHS ${CUDA_PREFIX}/bin
     NO_DEFAULT_PATH)
 
+  find_library(LIBCUDART cudart_static REQUIRED
+    PATHS ${CUDA_PREFIX}/lib ${CUDA_PREFIX}/lib64
+    NO_DEFAULT_PATH)
+
+  find_library(LIBCUDA cuda REQUIRED)
+
   set(CMAKE_CUDA_COMPILER ${NVCC})
   enable_language(CUDA)
+
+  if (TEST_KOKKOS_MODE)
+    # In principle, we could fetch and install the right Kokkos version instead
+    # of requiring the user to provide it, but that would require determining
+    # the GPU architecture on this machine and mapping that to Kokkos'
+    # configuration flags and also keeping up with any changes to Kokkos'
+    # configuaration-time parameters. All that is really not worth it since this
+    # benchmarking mode is only really for the core developers anyway.
+    if (NOT KOKKOS_CUDA_PREFIX)
+      message(FATAL_ERROR "KOKKOS_CUDA_PREFIX must be set in order to run Kokkos (cuda)")
+    endif ()
+
+    find_library(LIBKOKKOSCORE_CUDA kokkoscore REQUIRED
+      PATHS ${KOKKOS_CUDA_PREFIX}/lib ${KOKKOS_CUDA_PREFIX}/lib64
+      NO_DEFAULT_PATH)
+
+    set(TEST_VANILLA_KOKKOS_CUDA ON)
+  endif ()
 endif ()
 
 # See the comments for the cuda language tests above. Same goes for hip.
@@ -458,24 +507,24 @@ if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
   set(ENV{PATH} "${HIP_PREFIX}/bin:${PATH}")
   enable_language(HIP)
   set(ENV{PATH} "${PATH}")
-endif ()
 
-# Similar to Cuda and Hip, we may also want to check the .kokkos.cpp files with
-# a regular C++ compiler for performance checks. These are only useful when
-# doing performance comparisons.
-if (TEST_KOKKOS_MODE AND KITSUNE_BENCHMARK)
-  if (TEST_VANILLA_CUDA)
-    set(TEST_VANILLA_KOKKOS_CUDA ON)
-    if (NOT KOKKOS_CUDA_PREFIX)
-      message(FATAL_ERROR "KOKKOS_CUDA_PREFIX must be set to test Kokkos (cuda)")
-    endif ()
-  endif ()
-
-  if (TEST_VANILLA_HIP)
-    set(TEST_VANILLA_KOKKOS_HIP ON)
+  if (TEST_KOKKOS_MODE)
+    # In principle, we could fetch and install the right Kokkos version instead
+    # of requiring the user to provide it, but that would require determining
+    # the GPU architecture on this machine and mapping that to Kokkos'
+    # configuration flags and also keeping up with any changes to Kokkos'
+    # configuaration-time parameters. All that is really not worth it since this
+    # benchmarking mode is only really for the core developers anyway.
     if (NOT KOKKOS_HIP_PREFIX)
-      message(FATAL_ERROR "KOKKOS_HIP_PREFIX must be set to test Kokkos (hip)")
+      message(FATAL_ERROR "KOKKOS_HIP_PREFIX must be set in order to run Kokkos (hip)")
     endif ()
+
+    message(STATUS "KOKKOS_HIP_PREFIX: ${KOKKOS_HIP_PREFIX}")
+    find_library(LIBKOKKOSCORE_HIP kokkoscore REQUIRED
+      PATHS ${KOKKOS_HIP_PREFIX}/lib ${KOKKOS_HIP_PREFIX}/lib64
+      NO_DEFAULT_PATH)
+
+    set(TEST_VANILLA_KOKKOS_HIP ON)
   endif ()
 endif ()
 
@@ -486,6 +535,8 @@ endif ()
 # first place since this very much isn't one.
 remove_definitions(-Werror=date-time)
 
+# The tests in the Benchmarks directory can be used both for performance
+# comparisons and correctness checks.
 add_subdirectory(Benchmarks)
 
 # The single-source tests in particular are only intended for correctness. They

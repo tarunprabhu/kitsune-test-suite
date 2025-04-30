@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
 
   header("cuda", img, rawImg, sampleCount, imageWidth, imageHeight);
 
-  main.start();
+  total.start();
   unsigned totalPixels = imageWidth * imageHeight;
   unsigned blocksPerGrid =
       (totalPixels + threadsPerBlock - 1) / threadsPerBlock;

@@ -94,17 +94,12 @@ function (register_test target tapir_target cmdargs)
 
   if (NOT tapir_target STREQUAL "none")
     set(tapir_flags "--tapir=${tapir_target}")
-    if (tapir_target STREQUAL "cuda" AND NOT KITSUNE_CUDA_ARCH STREQUAL "")
-      list(APPEND tapir_flags "--tapir-cuda-arch=${KITSUNE_CUDA_ARCH}")
-    endif ()
-    if (tapir_target STREQUAL "hip" AND NOT KITSUNE_HIP_ARCH STREQUAL "")
-      list(APPEND tapir_flags "--tapir-hip-arch=${KITSUNE_HIP_ARCH}")
-    endif ()
 
     # We need to set the tapir flags on the link options, otherwise the runtime
     # libraries (kitrt, opencilk etc.) will not be linked in correctly.
     target_compile_options(${target} BEFORE PUBLIC "${tapir_flags}")
-    target_link_options(${target} BEFORE PUBLIC "${tapir_flags}" "${KITSUNE_LINKER_FLAGS}")
+    target_link_options(${target} BEFORE PUBLIC
+      "${tapir_flags}" "${KITSUNE_LINKER_FLAGS}")
   endif ()
 endfunction ()
 
@@ -175,8 +170,11 @@ function (kit_singlesource_test source lang tapir_target cmdargs)
   # compile the vanilla cuda code for the current GPU. If this is not done, it
   # will try to JIT the code which we don't want because it becomes a less fair
   # comparison.
-  if (lang STREQUAL "cuda" AND tapir_target STREQUAL "none")
-    set_target_properties(${target} PROPERTIES CUDA_ARCHITECTURES "native")
+  if (tapir_target STREQUAL "none")
+    if (lang STREQUAL "cuda" OR
+        lang STREQUAL "kokkos-nvidia")
+      set_target_properties(${target} PROPERTIES CUDA_ARCHITECTURES "native")
+    endif ()
   endif ()
 
   # cmake uses the compiler when linking. By passing -fkokkos to it, we ensure
@@ -187,18 +185,33 @@ function (kit_singlesource_test source lang tapir_target cmdargs)
   endif ()
 
   if (lang STREQUAL "kokkos-nvidia")
+    # We need to force the language of the file to be "cuda" because the Kokkos
+    # headers expect that a cuda compiler is being used.
+    set_source_files_properties(${source} PROPERTIES
+      LANGUAGE CUDA)
+
+    target_compile_options(${target} BEFORE PUBLIC --extended-lambda)
+
     target_include_directories(${target} BEFORE PUBLIC
       ${KOKKOS_CUDA_PREFIX}/include)
+
+    # In addition to Kokkos, we also need to link in cuda because clang won't
+    # do that automatically. I am not sure why.
     target_link_libraries(${target} PUBLIC
-      ${KOKKOS_CUDA_PREFIX}/lib/libkokkoscore.a)
+      ${LIBKOKKOSCORE_CUDA} ${LIBCUDART} ${LIBCUDA})
   elseif (lang STREQUAL "kokkos-amd")
+    # We need to force the language of the file to be "hip" because the Kokkos
+    # headers expect that a cuda compiler is being used.
     set_source_files_properties(${source} PROPERTIES
       LANGUAGE HIP)
+
     target_compile_definitions(${target} PUBLIC __HIP_PLATFORM_AMD__)
+
     target_include_directories(${target} BEFORE PUBLIC
-      /opt/rocm/include
       ${KOKKOS_HIP_PREFIX}/include)
-    target_link_libraries(${target} PUBLIC ${KOKKOS_HIP_PREFIX}/lib/libkokkoscore.a)
+
+    target_link_libraries(${target} PUBLIC
+      ${LIBKOKKOSCORE_HIP})
   endif ()
 endfunction()
 
@@ -371,15 +384,10 @@ macro(make_target base type tapir_target kokkos out)
     ${CMAKE_SOURCE_DIR}/Kitsune/include)
 
   set(tapir_flags "--tapir=${tapir_target}")
-  if (${tapir_target} STREQUAL "cuda" AND NOT KITSUNE_CUDA_ARCH STREQUAL "")
-    list(APPEND tapir_flags "--tapir-cuda-arch=${KITSUNE_CUDA_ARCH}")
-  endif ()
-  if (${tapir_target} STREQUAL "hip" AND NOT KITSUNE_HIP_ARCH STREQUAL "")
-    list(APPEND tapir_flags "--tapir-hip-arch=${KITSUNE_HIP_ARCH}")
-  endif ()
 
   target_compile_options(${target} BEFORE PUBLIC -flto ${tapir_flags})
-  target_link_options(${target} PUBLIC -flto ${tapir_flags} ${KITSUNE_LINKER_FLAGS})
+  target_link_options(${target} PUBLIC
+    -flto ${tapir_flags} ${KITSUNE_LINKER_FLAGS})
 
   if (kokkos)
     target_compile_options(${target} BEFORE PUBLIC -fkokkos -fkokkos-no-init)
