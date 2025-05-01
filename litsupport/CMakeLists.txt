@@ -12,6 +12,7 @@ set(LITSUPPORT_FILES
   modules/hash.py
   modules/hpmcount.py
   modules/__init__.py
+  modules/kitsune.py
   modules/microbenchmark.py
   modules/perf.py
   modules/profilegen.py
