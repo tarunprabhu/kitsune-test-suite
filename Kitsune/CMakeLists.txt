@@ -458,6 +458,15 @@ if (TEST_CUDA_TARGET AND KITSUNE_BENCHMARK)
   set(CMAKE_CUDA_COMPILER ${NVCC})
   enable_language(CUDA)
 
+  # Ensure that we collect the compile and link times. This is conditionally
+  # enabled for consistency with what is done with C and C++.
+  if(TEST_SUITE_COLLECT_COMPILE_TIME)
+    set(CMAKE_CUDA_COMPILE_OBJECT
+      "${CMAKE_BINARY_DIR}/tools/timeit --summary <OBJECT>.time ${CMAKE_CUDA_COMPILE_OBJECT}")
+    set(CMAKE_CUDA_LINK_EXECUTABLE
+      "${CMAKE_BINARY_DIR}/tools/timeit --summary <TARGET>.link.time ${CMAKE_CUDA_LINK_EXECUTABLE}")
+  endif()
+
   if (TEST_KOKKOS_MODE)
     # In principle, we could fetch and install the right Kokkos version instead
     # of requiring the user to provide it, but that would require determining
@@ -507,6 +516,15 @@ if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
   set(ENV{PATH} "${HIP_PREFIX}/bin:${PATH}")
   enable_language(HIP)
   set(ENV{PATH} "${PATH}")
+
+  # Ensure that we collect the compile and link times. This is conditionally
+  # enabled for consistency with what is done with C and C++.
+  if(TEST_SUITE_COLLECT_COMPILE_TIME)
+    set(CMAKE_HIP_COMPILE_OBJECT
+      "${CMAKE_BINARY_DIR}/tools/timeit --summary <OBJECT>.time ${CMAKE_HIP_COMPILE_OBJECT}")
+    set(CMAKE_HIP_LINK_EXECUTABLE
+      "${CMAKE_BINARY_DIR}/tools/timeit --summary <TARGET>.link.time ${CMAKE_HIP_LINK_EXECUTABLE}")
+  endif()
 
   if (TEST_KOKKOS_MODE)
     # In principle, we could fetch and install the right Kokkos version instead
