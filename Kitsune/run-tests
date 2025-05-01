@@ -123,7 +123,6 @@ rocm_smi=$(command -v rocm-smi)
 # GPU's on it. The more likely case is that there are multiple devices of the
 # same model. Optimize for that scenario but be flexible enough to record all
 # the GPU's if that is not the case.
-#
 gpus=""
 count=0
 if [ -n "${nvidia_smi}" ]; then
@@ -199,14 +198,12 @@ platform="{
 
 echo "${platform}" >${kitsune}/platform.json
 
-if [ ${pass} -eq 0 ]; then
-	# Generate the combined report. There is no reason to do this as a separate
-	# step. It can always be done separately if needed. The -b option must be
-	# given the root of the test suite.
-	${kitsune}/utils/kit-combine \
-		-b "${test_suite}" \
-		-o "${outfile}" \
-		"${kitsune}/ts-report.json"
-fi
+# Generate the combined report. There is no reason to do this as a separate
+# step. It can always be done separately if needed. The -b option must be
+# given the root of the test suite.
+${kitsune}/utils/kit-combine \
+    -b "${test_suite}" \
+    -o "${outfile}" \
+    "${kitsune}/ts-report.json"
 
 exit ${pass}

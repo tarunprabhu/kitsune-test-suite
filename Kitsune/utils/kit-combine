@@ -189,13 +189,15 @@ def process(report_file: str, build_dir: str):
         # the values there are determined by looking for timing files that have
         # a prefix that matches the test name.
         data['test'] = base
-        data['object-files'] = get_num_object_files(build_dir, base)
-        data['compile-time'] = get_compile_time(build_dir, base)
-        data['link-time'] = get_link_time(build_dir, base)
-        data['size'] = test['metrics']['size']
+        data['code'] = test['code'].lower()
+        if data['code'] == 'pass':
+            data['object-files'] = get_num_object_files(build_dir, base)
+            data['compile-time'] = get_compile_time(build_dir, base)
+            data['link-time'] = get_link_time(build_dir, base)
+            data['size'] = test['metrics']['size']
 
-        if base.startswith('Kitsune/Benchmarks'):
-            parse_output_into(build_dir, base, data)
+            if base.startswith('Kitsune/Benchmarks'):
+                parse_output_into(build_dir, base, data)
 
         combined['tests'][name][tt] = data
 
