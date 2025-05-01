@@ -348,7 +348,12 @@ endif()
 # directory where they will be picked up automatically. Alternatively you may
 # manually specify directories to include test-suites at external locations
 # and to leave out some of the default ones.
-if(NOT TEST_SUITE_SUBDIRS)
+option(KITSUNE_ONLY "Only run the Kitsune tests" ON)
+if(KITSUNE_ONLY)
+  message(STATUS "Only running Kitsune tests")
+  set(TEST_SUITE_SUBDIRS "Kitsune" CACHE STRING
+    "Semicolon separated list of directories with CMakeLists.txt to include")
+elseif(NOT TEST_SUITE_SUBDIRS)
   file(GLOB sub_cmakelists RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} */CMakeLists.txt)
   set(TEST_SUITE_SUBDIRS "")
   foreach(entry ${sub_cmakelists})
