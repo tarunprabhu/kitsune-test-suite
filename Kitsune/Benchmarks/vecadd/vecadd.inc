@@ -52,7 +52,7 @@ static void parseCommandLineInto(int argc, char *argv[], size_t &n,
     *tpb = 256;
   }
 
-  char flag;
+  int flag;
   while ((flag = getopt(argc, argv, "hjt:")) != -1) {
     switch (flag) {
     case 'h':
