@@ -61,7 +61,7 @@ static void parseCommandLineInto(int argc, char *argv[],
   }
   outFile = std::filesystem::path(argv[0]).filename().string() + ".dat";
 
-  char flag;
+  int flag;
   while ((flag = getopt(argc, argv, "c:g:hjt:")) != -1) {
     switch (flag) {
     case 'c':

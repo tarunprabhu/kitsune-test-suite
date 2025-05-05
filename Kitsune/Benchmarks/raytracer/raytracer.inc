@@ -73,7 +73,7 @@ static void parseCommandLineInto(int argc, char *argv[], unsigned &sampleCount,
     *tpb = 256;
   }
 
-  char flag;
+  int flag;
   while ((flag = getopt(argc, argv, "c:g:hjt:")) != -1) {
     switch (flag) {
     case 'c':
