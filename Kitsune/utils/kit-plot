@@ -68,7 +68,7 @@ plot_labels = {
 # successful and will terminate the program with an error message otherwise
 def parse_command_line_args():
     prog = "plotter"
-    descr = "Generate plots from Kitsune test suite report."
+    descr = "Generate plots from Kitsune test suite report. Will overwrite any plot files currently in save directory."
 
     # TODO: fix help message formatting so that wrapped help message text
     #       gets indented
