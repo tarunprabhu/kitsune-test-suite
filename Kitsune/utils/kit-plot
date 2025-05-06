@@ -250,11 +250,7 @@ def generate_plot(args, data, metric):
     # Get names/labels and format plot
     title, ylabel, xlabel, filename = plot_labels[metric]
     if not args.no_baseline:
-        ylabel = (
-            "Multiplicative Difference from Baseline ("
-            + baseline
-            + ")\n> 1.0 is faster"
-        )
+        ylabel = "Speedup over kokkos (higher is better)"
     if args.save_dir:
         filename = args.save_dir + "/" + filename
 
