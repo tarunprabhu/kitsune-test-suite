@@ -6,15 +6,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import sys
+import warnings
 
 # Despite representing data for different metrics, all the plots are the same
-# type of graph, so they can be generated the same way. However, the graph
+# type of graph, and they can be generated the same way. However, the graph
 # title, x and y labels, and file names should still be different for each
 # metric. This dictionary stores this information for each metric by using the
 # metric name as the key
-plot_labels = {
+# Tuple entries are of form (Title, Y-label, X-Label, Filename)
+PLOT_LABELS = {
     "compile-time": (
-        "Compilation Time Comparison",
+        "Total Compile Time Comparison",
         "Time (seconds)",
         "Benchmark Name",
         "compile-time.png",
@@ -38,43 +40,51 @@ plot_labels = {
         "mean-runtime.png",
     ),
     "euler3d-total-runtime": (
-        "Euler3d Kernel Performance Comparison: Total Runtime",
+        "Euler3d Total Runtime Comparison (Kernels)",
         "Total Runtime (seconds)",
         "Kernel Name",
-        "euler3d-kernel-total-rt.png",
+        "euler3d-kernel-total-runtime.png",
     ),
     "srad-total-runtime": (
-        "Srad Kernel Performance Comparison: Total Runtime",
+        "Srad Total Runtime Comparison (Kernels)",
         "Total Runtime (seconds)",
         "Kernel Name",
-        "srad-kernel-total-rt.png",
+        "srad-kernel-total-runtime.png",
     ),
     "euler3d-mean-runtime": (
-        "Euler3d Kernel Performance Comparison: Mean Runtime",
+        "Euler3d Mean Runtime Comparison (Kernels)",
         "Mean Runtime (seconds)",
         "Kernel Name",
-        "euler3d-kernel-mean-rt.png",
+        "euler3d-kernel-mean-runtime.png",
     ),
     "srad-mean-runtime": (
-        "Srad Kernel Performance Comparison: Mean Runtime",
+        "Srad Mean Runtime Comparison (Kernels)",
         "Mean Runtime (seconds)",
         "Kernel Name",
-        "srad-kernel-mean-rt.png",
+        "srad-kernel-mean-runtime.png",
     ),
 }
 
+BENCHMARK_OPTIONS = ["copy", "euler3d", "raytracer", "saxpy", "srad", "vecadd"]
+METRIC_OPTIONS = ["compile-time", "link-time", "total-runtime", "mean-runtime"]
+
+MULTI_KERNEL_BENCHMARKS = ["euler3d", "srad"]
+MULTI_KERNEL_METRICS = ["total-runtime", "mean-runtime"]
+
+BASELINE_TARGETS = ["kokkos-nvidia", "kokkos-amd"]
+
+ERROR_BAR_CAP_SIZE = 5
+
+FIGURE_WIDTH = 9
+FIGURE_HEIGHT = 6
+
+US_PER_SEC = 1000000
 
 # Parse the command line arguments. Returns the parsed object if parsing was
 # successful and will terminate the program with an error message otherwise
 def parse_command_line_args():
-    prog = "plotter"
-    descr = "Generate plots from Kitsune test suite report. Will overwrite any plot files currently in save directory."
-
-    # TODO: fix help message formatting so that wrapped help message text
-    #       gets indented
-    parser = ap.ArgumentParser(
-        prog=prog, description=descr, formatter_class=ap.RawTextHelpFormatter
-    )
+    descr = "Generate plots from a Kitsune test suite report. This will overwrite any plot files currently in the save directory."
+    parser = ap.ArgumentParser(description=descr)
     parser.add_argument(
         "-e",
         "--error-bars",
@@ -86,80 +96,113 @@ def parse_command_line_args():
         "-k",
         "--kernel-plots",
         action="store_true",
-        help="When used, plots mean kernel runtime plots for benchmarks "
-        "with multiple kernels: euler3d, srad",
+        help="When used, plots runtime metrics for benchmarks with multiple "
+        "kernels: " + ', '.join(MULTI_KERNEL_BENCHMARKS),
     )
     parser.add_argument(
         "-s",
         "--save-dir",
         metavar="<path>",
-        help="Path to directory where you would like to save plots (default:"
-        " save to current directory)",
+        help="Path to directory where you would like to save plots (default: "
+        "save to current directory)",
     )
-    # TODO: parsing the arguments into a list like this is very clean, but it
-    #       creates a problem if positional argument (report) is put at the
-    #       end of command because it gets wrapped up by nargs choice
     parser.add_argument(
         "--benchmarks",
-        metavar="BENCHMARK",
-        nargs="+",
         type=str,
-        choices=["copy", "euler3d", "raytracer", "saxpy", "srad", "vecadd"],
-        default=["copy", "euler3d", "raytracer", "saxpy", "srad", "vecadd"],
-        help="List of benchmarks to include in plots. "
-        "If bechmarks are not specified, data from all possible "
-        "benchmarks will be plotted\n"
-        "options: copy, euler3d, raytracer, saxpy, srad, vecadd",
+        nargs="+",
+        choices=BENCHMARK_OPTIONS,
+        default=BENCHMARK_OPTIONS,
+        help="List of benchmarks to include in plots. If benchmarks are not "
+        "specified, data from all known benchmarks will be plotted",
     )
     parser.add_argument(
         "--metrics",
         type=str,
-        metavar="METRIC",
         nargs="+",
-        choices=["compile-time", "link-time", "total-runtime", "mean-runtime"],
-        default=["compile-time", "link-time", "total-runtime", "mean-runtime"],
-        help="List of metrics to generate plots for. "
-        "If metrics flag is not specified, plots for all possible "
-        "metrics will be generated\n"
-        "options: compile-time, link-time, total-runtime, "
-        "mean-runtime",
+        choices=METRIC_OPTIONS,
+        default=METRIC_OPTIONS,
+        help="List of metrics to generate plots for. If this option is not "
+        "specified, plots for all known metrics will be generated",
     )
     parser.add_argument(
         "--targets",
         type=str,
         metavar="TARGET",
         nargs="+",
-        help="List of targets to include in plots. "
-        "If metrics flag is not specified, plots using all possible "
-        "targets will be generated\n"
-        "options are based on your architecture, use --print-targets "
-        "to print options",
+        help="List of targets to include in plots. If this option is not "
+        "specified, plots using all known targets will be generated. Use "
+        "--print-targets to print options",
+    )
+    parser.add_argument(
+        "--image_dpi",
+        metavar="<int>",
+        default=300,
+        help="Value to be used for dpi of saved images",
+    )
+    parser.add_argument(
+        "--filter_extremes",
+        action="store_true",
+        help="Subtract min and max values from total runtime data. Mean runtimes will also be recalulated from this new total and decreased count",
     )
     parser.add_argument(
         "--no-annotate",
-        action="store_false",
-        help="Enable y-value annotations above data bars",
+        action="store_true",
+        help="Do not include y-value annotations above data bars",
     )
     parser.add_argument(
-        "--no-baseline", action="store_true", help="Turn off baseline mode for plots"
+        "--no-baseline",
+        action="store_true",
+        help="Do not process data with a baseline target. Instead, plots will "
+        "use raw data"
     )
     parser.add_argument(
         "--no-metadata",
         action="store_false",
-        help="Turns metadata caption with date/time and GPU info off",
+        help="Do not generate the caption containing metadata such as date, "
+        "time, GPU model etc.",
     )
     parser.add_argument(
         "--print-targets",
         action="store_true",
-        help="If this flag is used, no plots will be generated. Instead a "
-        "list of targets in provided report will be printed",
+        help="Print the list of targets present in the report. Do not generate "
+        "any plots",
     )
     parser.add_argument(
-        "report", type=str, metavar="<file>", help="Path to .json report file"
+        "report",
+        type=str,
+        metavar="<file>",
+        help="Path to .json report file. Note: if this argument is placed "
+        "immediately after one of the benchmarks, metrics, or targets "
+        "options, a -- must be placed in between (eg. --benchmarks ... "
+        "-- /path/to/report.json)"
     )
 
     return parser.parse_args()
 
+def get_baseline(data):
+    for potential_baseline in data:
+        if potential_baseline in BASELINE_TARGETS:
+            return potential_baseline
+
+    sys.exit("Error: No suitable baseline found. Targets eligible to be a "
+             "baseline: " + ', '.join(BASELINE_TARGETS))
+
+def process_error_ranges(args, values, metric, target_name):
+    error_mins = np.array([])
+    error_maxs = np.array([])
+    # Similar idea to how the raw data is processed, but the resulting list
+    # needs to be split further since each entry in error_bars is a tuple of min
+    # and max values for that benchmark. To plot, mins and maxs need to be in
+    # seperate lists, rather than grouped together as in the raw data
+    errs = [
+            args.error_bars_data[metric][target_name][k]
+            for k in sorted(args.error_bars_data[metric][target_name].keys())
+           ]
+    for i, error_range in enumerate(errs):
+        error_mins = np.append(error_mins, values[i] - error_range[0])
+        error_maxs = np.append(error_maxs, error_range[1] - values[i])
+
+    return np.array([error_mins, error_maxs])
 
 def generate_plot(args, data, metric):
     # These values are used to set up bar positions and width
@@ -168,56 +211,58 @@ def generate_plot(args, data, metric):
     x = np.arange(len(benchmark_names))
     width = 0.8 * (1 / num_targets)
 
-    fig, ax = plt.subplots(figsize=(9, 6))
+    fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_HEIGHT))
 
     # Collect baseline data for plots
     if not args.no_baseline:
-        possible_baselines = ["kokkos-nvidia", "kokkos-amd"]
-        # TODO: I feel like there should be a better way of doing this but if
-        #       there is, I can't think of it right now
-        if possible_baselines[0] in data:
-            baseline = possible_baselines[0]
-        elif possible_baselines[1] in data:
-            baseline = possible_baselines[1]
-        else:
-            sys.exit("Could not find baseline target (kokkos-nvidia or kokkos-amd)")
+        baseline = get_baseline(data)
+        # The benchmarks are not added to the report in alphabetical order. In
+        # practice, this does not really matter because it only affects the
+        # order of the benchmarks along the x axis. However, the plots look a
+        # bit cleaner when sorted alphabetically
         baseline_data = np.array(
             [data[baseline][k] for k in sorted(data[baseline].keys())]
         )
+        if args.error_bars and metric in args.error_bars_data:
+            baseline_error_ranges = process_error_ranges(args, baseline_data, metric, baseline)
 
     for index, target_name in enumerate(sorted(data.keys())):
-        # This is somewhat convoluted.
-        # The benchmarks are not run in alphabetical order. In practice, this
-        # does not really matter because it only affects the order of the
-        # benchmarks along the x axis. However, the plots look a bit cleaner
-        # when sorted alphabetically
-        annotate_vals = np.array(
+        raw_values = np.array(
             [data[target_name][k] for k in sorted(data[target_name].keys())]
         )
 
         if not args.no_baseline:
-            vals = baseline_data / annotate_vals
+            # TODO: I am not sure if suppressing the warnings like this is
+            #       actually a good idea. As mentioned in my comment below, the
+            #       way Python handles divide by zeros is very convenient. Now,
+            #       if a user sees a bunch of divide by zero warnings, they
+            #       might worry. But because the plots look the way we want them
+            #       to, this worry would be completely unneccesary. That being
+            #       said there could be a different possible runtime warning
+            #       that I am unaware of which will now never be seen
+
+            # In the event that a report is missing data for a benchmark, a
+            # default value of 0 is used. But of course, dividing by 0 is
+            # illegal, so when one tries to divide by 0, Python will emit a
+            # runtime warning, and store a value of "inf". For bar plots, when
+            # matplotlib encounters an inf, it will simply omit that bar.
+            # Conveniently, this is the desired behavior for the test suite
+            # plots. So, to prevent unnessecary panic, these runtime warnings
+            # are temporarily suppressed
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
+            values = baseline_data / raw_values
+            warnings.resetwarnings()
         else:
-            vals = annotate_vals
+            values = raw_values
 
-        if args.no_baseline and metric in args.error_bars_data:
-            error_mins = []
-            error_maxs = []
-            # Similar idea to vals, but the resulting list needs to be split
-            # further since each entry in error_bars is a list of min and max
-            # values for that benchmark. To plot, mins and maxs need to be in
-            # seperate lists, rather than grouped together as in the raw data
-            errs = np.array(
-                [
-                    args.error_bars_data[metric][target_name][k]
-                    for k in sorted(args.error_bars_data[metric][target_name].keys())
-                ]
-            )
-            for i, error_range in enumerate(errs):
-                error_mins.append(vals[i] - error_range[0])
-                error_maxs.append(error_range[1] - vals[i])
-
-            error_ranges = [error_mins, error_maxs]
+        if args.error_bars and metric in args.error_bars_data:
+            error_ranges = process_error_ranges(args, raw_values, metric, target_name)
+            if not args.no_baseline:
+                # Again, suppress divide by zero warnings in the event of
+                # missing data
+                warnings.filterwarnings("ignore", category=RuntimeWarning)
+                error_ranges = baseline_error_ranges / error_ranges
+                warnings.resetwarnings()
         else:
             error_ranges = None
 
@@ -225,20 +270,20 @@ def generate_plot(args, data, metric):
         # the x position of the center of the bar
         bars = ax.bar(
             x + (index + 0.5 * (1 - num_targets)) * width,
-            vals,
+            values,
             width,
             label=target_name,
             zorder=3,
             yerr=error_ranges,
-            capsize=5,
+            capsize=ERROR_BAR_CAP_SIZE,
         )
 
         # Annotate each bar with its y value if enabled
-        if args.no_annotate:
+        if not args.no_annotate:
             for i, bar in enumerate(bars):
                 height = bar.get_height()
                 ax.annotate(
-                    f"{annotate_vals[i]:.2f}",
+                    f"{raw_values[i]:.2f}",
                     xy=(bar.get_x() + bar.get_width() / 2, height),
                     xytext=(0, 3),
                     textcoords="offset points",
@@ -248,7 +293,7 @@ def generate_plot(args, data, metric):
                 )
 
     # Get names/labels and format plot
-    title, ylabel, xlabel, filename = plot_labels[metric]
+    title, ylabel, xlabel, filename = PLOT_LABELS[metric]
     if not args.no_baseline:
         ylabel = "Speedup over kokkos (higher is better)"
     if args.save_dir:
@@ -269,13 +314,20 @@ def generate_plot(args, data, metric):
 
     # Clean up the layout and save
     fig.tight_layout()
-    plt.savefig(filename, dpi=300)
-
+    plt.savefig(filename, dpi=args.image_dpi)
 
 def parse_and_plot_benchmark_data(args, json_data):
-    # If no targets are provided, use whatever targets are in the report
+    # If no targets are provided, use whatever targets are in the report.
+    # Otherwise, verify that there is data for all user provided targets in the
+    # report
     if not args.targets:
         args.targets = json_data["targets"]
+    else:
+        missing_targets = [target for target in args.targets
+                           if target not in json_data["targets"]]
+        if missing_targets:
+            sys.exit("Error: There is no data in provided report for the following targets: " + ', '.join(missing_targets))
+
 
     if args.error_bars:
         args.error_bars_data = {
@@ -288,13 +340,11 @@ def parse_and_plot_benchmark_data(args, json_data):
     # names are of form: benchmark-metric (e.g. euler3d-total-runtime)
     enabled_kernel_metrics = []
     if args.kernel_plots:
-        multi_kernel_benchmarks = ["euler3d", "srad"]
-        multi_kernel_metrics = ["total-runtime", "mean-runtime"]
-        for benchmark in [b for b in args.benchmarks if b in multi_kernel_benchmarks]:
+        for benchmark in [b for b in args.benchmarks if b in MULTI_KERNEL_BENCHMARKS]:
             enabled_kernel_metrics += [
                 (benchmark + "-" + metric)
                 for metric in args.metrics
-                if metric in multi_kernel_metrics
+                if metric in MULTI_KERNEL_METRICS
             ]
 
     plot_data = {}
@@ -315,26 +365,48 @@ def parse_and_plot_benchmark_data(args, json_data):
                     plot_data[metric_name][target_name] = {}
                     if args.error_bars:
                         args.error_bars_data["mean-runtime"][target_name] = {}
-
-                if metric_name in target:
-                    val = target[metric_name]
+                if target["code"] == "fail":
+                    print(
+                        f"Warning: no test data for {target_name} {benchmark_name}. Bar will be omited from {metric_name} plot",
+                        file=sys.stderr,
+                    )
+                    value = 0
+                    if args.error_bars and metric_name == "mean-runtime":
+                        args.error_bars_data[metric_name][target_name][
+                            benchmark_name
+                        ] = (0, 0)
+                elif metric_name in target:
+                    value = target[metric_name]
                 elif metric_name == "total-runtime":
-                    val = target["times"]["total"]["total"]
+                    value = target["times"]["total"]["total"]
+                    if args.filter_extremes and target["times"]["total"]["count"] != 2:
+                        value -= target["times"]["total"]["max"]
+                        value -= target["times"]["total"]["min"]
+                elif metric_name == "mean-runtime" and args.filter_extremes and target["times"]["total"]["count"] != 2:
+                    total = target["times"]["total"]["total"]
+                    total -= target["times"]["total"]["max"]
+                    total -= target["times"]["total"]["min"]
+                    value = total / (target["times"]["total"]["count"] - 2)
                 elif metric_name == "mean-runtime":
-                    val = target["times"]["total"]["mean"]
+                    value = target["times"]["total"]["mean"]
                     if args.error_bars:
-                        rt_min = target["times"]["total"]["min"] / 1000000
-                        rt_max = target["times"]["total"]["max"] / 1000000
+                        rt_min = target["times"]["total"]["min"] / US_PER_SEC
+                        rt_max = target["times"]["total"]["max"] / US_PER_SEC
                         args.error_bars_data[metric_name][target_name][
                             benchmark_name
                         ] = (rt_min, rt_max)
                 # Convert from microseconds to seconds
-                # TODO: cl arg to set units?
-                plot_data[metric_name][target_name][benchmark_name] = val / 1000000
+                plot_data[metric_name][target_name][benchmark_name] = value / US_PER_SEC
 
             # Collect data for plots comparing kernel performance
             for metric_name in enabled_kernel_metrics:
                 if benchmark_name not in metric_name:
+                    continue
+                if target["code"] == "fail":
+                    print(
+                        f"Warning: no kernel data for {target_name} {benchmark_name}. Skipping target for {metric_name} plot",
+                        file=sys.stderr,
+                    )
                     continue
                 if target_name not in plot_data[metric_name]:
                     plot_data[metric_name][target_name] = {}
@@ -344,16 +416,24 @@ def parse_and_plot_benchmark_data(args, json_data):
                     kernel = target["times"][kernel_name]
                     if kernel["count"] != 1:
                         if "total-runtime" in metric_name:
-                            val = kernel["total"]
+                            value = kernel["total"]
+                            if args.filter_extremes and kernel["count"] != 2:
+                                value -= kernel["max"]
+                                value -= kernel["min"]
+                        elif metric_name == "mean-runtime" and args.filter_extremes and kernel["count"] != 2:
+                            total = kernel["total"]
+                            total -= kernel["max"]
+                            total -= kernel["min"]
+                            value = total / (kernel["count"] - 2)
                         elif "mean-runtime" in metric_name:
-                            val = kernel["mean"]
+                            value = kernel["mean"]
                             if args.error_bars:
-                                rt_min = kernel["min"] / 1000000
-                                rt_max = kernel["max"] / 1000000
+                                rt_min = kernel["min"] / US_PER_SEC
+                                rt_max = kernel["max"] / US_PER_SEC
                                 args.error_bars_data[metric_name][target_name][
                                     kernel_name
                                 ] = (rt_min, rt_max)
-                        plot_data[metric_name][target_name][kernel_name] = val / 1000000
+                        plot_data[metric_name][target_name][kernel_name] = value / US_PER_SEC
 
     # Generate all requested plots
     for metric, data in plot_data.items():
@@ -366,23 +446,25 @@ def main():
     args = parse_command_line_args()
 
     if not os.path.exists(args.report):
-        sys.exit(f"Could not find report: {args.report}")
+        sys.exit(f"Error: Could not find report: {args.report}")
 
     if args.save_dir and not os.path.isdir(args.save_dir):
-        sys.exit(f"Could not find directory: {args.save_dir}")
+        sys.exit(f"Error: Could not find directory: {args.save_dir}")
 
-    if args.error_bars and not args.no_baseline:
+    if args.error_bars and args.filter_extremes:
         print(
             "Warning: Error bars were enabled but it is not possible to "
-            "include error bars on plots scaled by a baseline. Generated "
-            "plots will not have error bars"
+            "include error bars when removing extremes from data. Generated "
+            "plots will not have error bars",
+            file=sys.stderr,
         )
-
+        args.error_bars = False
     if args.error_bars and not args.no_annotate:
         print(
             "Warning: It is not recommended to include both error bars and "
             "annotations in one plot since the two features overlap and may "
-            "look somewhat messy"
+            "look somewhat messy",
+            file=sys.stderr,
         )
 
     with open(args.report, "r") as file:
@@ -394,7 +476,7 @@ def main():
         return 0
 
     if not json_data["tests"]:
-        sys.exit("Provided report does have test data")
+        sys.exit("Error: Provided report does have test data")
 
     parse_and_plot_benchmark_data(args, json_data)
 
