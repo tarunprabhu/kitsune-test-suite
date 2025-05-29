@@ -66,47 +66,36 @@ PLOT_LABELS = {
 }
 
 # All known benchmarks in kitsune-test-suite
-
 # If any benchmarks are added to `Kitsune/Benchmarks`, this list should be
 # updated
-
 BENCHMARKS = ["copy", "euler3d", "raytracer", "saxpy", "srad", "vecadd"]
 
 # All known metrics collected when building/running the kitsune-test-suite
-
 # If any additional metrics are collected, this list should be updated. In most
 # cases, it will also be necessary to add support for metric in
 # parse_and_plot_benchmark_data()
-
 METRICS = ["compile-time", "link-time", "total-runtime", "mean-runtime"]
 
 # All known benchmarks in kitsune-test-suite that have multiple kernels
-
 # If any multi-kernel benchmarks are added to `Kitsune/Benchmarks`, this list
 # should be updated
-
 MULTI_KERNEL_BENCHMARKS = ["euler3d", "srad"]
 
 # All known metrics collected from kernels in multi-kernel benchmarks when
 # building/running the kitsune-test-suite
-
 # If any additional metrics are collected, this list should be updated. In most
 # cases, it will also be necessary to add support for metric in
 # parse_and_plot_benchmark_data()
-
 MULTI_KERNEL_METRICS = ["total-runtime", "mean-runtime"]
 
 # All known targets that are suitible to act as baselines for normalizing
 # kitsune-test-suite data.
-
 # If any additional targets are suitable to be baselines, this list should be
 # update. Even if a report has data for more than one baseline target, only
 # one baseline will be selected for plotting
-
 BASELINE_TARGETS = ["kokkos-nvidia", "kokkos-amd"]
 
 # Figure width and height, in inches
-
 FIGURE_WIDTH = 9
 FIGURE_HEIGHT = 6
 
@@ -118,7 +107,10 @@ US_PER_SEC = 1000000
 # Parse the command line arguments. Returns the parsed object if parsing was
 # successful and will terminate the program with an error message otherwise
 def parse_command_line_args():
-    descr = "Generate plots from a Kitsune test suite report. This will overwrite any plot files currently in the save directory."
+    descr = (
+        "Generate plots from a Kitsune test suite report. This will "
+        "overwrite any plot files currently in the save directory."
+    )
     parser = ap.ArgumentParser(description=descr)
     parser.add_argument(
         "-e",
@@ -177,7 +169,9 @@ def parse_command_line_args():
     parser.add_argument(
         "--filter-extremes",
         action="store_true",
-        help="Subtract min and max values from total runtime data. Mean runtimes will also be recalulated from this new total and decreased count",
+        help="Subtract min and max values from total runtime data. Mean "
+        "runtimes will also be recalulated from this new total and decreased "
+        "count",
     )
     parser.add_argument(
         "--no-annotate",
