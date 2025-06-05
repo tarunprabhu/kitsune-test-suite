@@ -18,7 +18,7 @@ extern int optind, opterr, optopt;
 #include "types.h"
 
 static const char *usage = "vecscale [OPTIONS] [n] [iterations]\n"
-                           "Try `vecadd -h` for more information";
+                           "Try `vecscale -h` for more information";
 
 // clang-format off
 static const char *help =
@@ -129,7 +129,7 @@ template <typename Arr>
 static void header(const std::string &label, Arr &a, Arr &b, size_t n) {
   srand(7);
   std::cout << "\n";
-  std::cout << "---- vector addition benchmark (" << label << ") ----\n"
+  std::cout << "---- vector scale benchmark (" << label << ") ----\n"
             << "  Vector size: " << n << " elements.\n\n";
   std::cout << "  Allocating arrays and filling with random values..."
             << std::flush;
