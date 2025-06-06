@@ -373,6 +373,7 @@ int main(int argc, char *argv[]) {
     copy.start();
     cpy<<<bpgNelrNvar, threadsPerBlock>>>(old_variables, variables,
                                            nelr * NVAR);
+    cudaDeviceSynchronize();
     copy.stop();
 
     // for the first iteration we compute the time step
