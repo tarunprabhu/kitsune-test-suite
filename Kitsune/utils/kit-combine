@@ -160,9 +160,7 @@ def process(report_file: str, build_dir: str):
     combined['notes'] = [
         '1. All times are in microseconds',
         '2. Executable sizes are in bytes',
-        '3. If a compile/link time could not be determined, it is -1',
-        '4. For now, we cannot get compile and link times when using '
-        'nvcc/hipcc. Neither can we collect the number of object files'
+        '3. Compile/link times that could not be determined are set to -1'
     ]
 
     combined['targets'] = []
@@ -190,12 +188,11 @@ def process(report_file: str, build_dir: str):
         # a prefix that matches the test name.
         data['test'] = base
         data['code'] = test['code'].lower()
+        data['object-files'] = get_num_object_files(build_dir, base)
+        data['compile-time'] = get_compile_time(build_dir, base)
+        data['link-time'] = get_link_time(build_dir, base)
         if data['code'] == 'pass':
-            data['object-files'] = get_num_object_files(build_dir, base)
-            data['compile-time'] = get_compile_time(build_dir, base)
-            data['link-time'] = get_link_time(build_dir, base)
             data['size'] = test['metrics']['size']
-
             if base.startswith('Kitsune/Benchmarks'):
                 parse_output_into(build_dir, base, data)
 
