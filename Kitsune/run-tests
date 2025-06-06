@@ -54,34 +54,34 @@ build_dir=""
 outfile="${kitsune}/report.json"
 
 while getopts "b:ho:" opt; do
-	case "${opt}" in
-	b)
-		build_dir="${OPTARG}"
-		;;
-	h)
-		echo "${help}"
-		exit 0
-		;;
-	o)
-		outfile="${OPTARG}"
-		;;
-	*)
-		echo "${usage}"
-		exit 1
-		;;
-	esac
+    case "${opt}" in
+    b)
+        build_dir="${OPTARG}"
+        ;;
+    h)
+        echo "${help}"
+        exit 0
+        ;;
+    o)
+        outfile="${OPTARG}"
+        ;;
+    *)
+        echo "${usage}"
+        exit 1
+        ;;
+    esac
 done
 
 lit=
 if [ -n "${build_dir}" ]; then
-	lit=${build_dir}/bin/llvm-lit
+    lit=${build_dir}/bin/llvm-lit
 else
-	lit=$(command -v lit)
+    lit=$(command -v lit)
 fi
 
 if [ -z "${lit}" ] || ! [ -x "${lit}" ]; then
-	echo "Could not find suitable lit executable"
-	exit 1
+    echo "Could not find suitable lit executable"
+    exit 1
 fi
 
 # TODO: It is not clear that we need NO_STOP_MESSAGE=1 for the Fortran tests,
@@ -92,23 +92,39 @@ ${lit} -s -j 1 -o ${kitsune}/ts-report.json ${kitsune}
 # This should return a non-zero exit code if any tests failed.
 pass=$?
 
-# It is unlikely that there will be CPU's with different models on the test
-# node. But if that does happen, we don't really care since this is only
-# intended to be informational.
+# Use lscpu if available since it may give better information across Linux
+# systems than cpuinfo.
 cpu="<<UNKNOWN>>"
 cores="0"
-if ls -l /proc/cpuinfo >/dev/null 2>&1; then
-	cpu=$(cat /proc/cpuinfo |
-		grep "model name" |
-		sed 's/model name\s*:\s*//g' |
-		sort |
-		uniq)
-	cores=$(cat /proc/cpuinfo |
-		grep "processor" |
-		sed 's/processor\s*:\s*//g' |
-		wc -l)
+if command -v lscpu >/dev/null 2>&1; then
+    cpuinfo=$(lscpu)
+    cpu=$(echo "${cpuinfo}" |
+        grep "Model name" |
+        sed 's/Model name\s*:\s*//g' |
+        sort |
+        uniq)
+    tpc=$(echo "${cpuinfo}" |
+        grep "Thread(s) per core\s*:" |
+        grep -oE "[0-9]+")
+    cps=$(echo "${cpuinfo}" |
+        grep "Core(s) per socket\s*:" |
+        grep -oE "[0-9]+")
+    sockets=$(echo "${cpuinfo}" |
+        grep "Socket(s)\s*:" |
+        grep -oE "[0-9]+")
+    cores=$((tpc * cps * sockets))
+elif ls -l /proc/cpuinfo >/dev/null 2>&1; then
+    cpu=$(cat /proc/cpuinfo |
+        grep "model name" |
+        sed 's/model name\s*:\s*//g' |
+        sort |
+        uniq)
+    cores=$(cat /proc/cpuinfo |
+        grep "processor" |
+        sed 's/processor\s*:\s*//g' |
+        wc -l)
 else
-	echo "Looking up CPU info on non-Linux platforms is not implemented"
+    echo "Looking up CPU info on non-Linux platforms is not implemented"
 fi
 
 nvidia_smi=$(command -v nvidia-smi)
@@ -126,42 +142,42 @@ rocm_smi=$(command -v rocm-smi)
 gpus=""
 count=0
 if [ -n "${nvidia_smi}" ]; then
-	# If no GPU's are found, nvidia-smi -L will return an error code.
-	report=$(nvidia-smi -L)
-	if [ $? -eq 0 ]; then
-		names=$(echo "${report}" |
-			sed -E 's/GPU[ ]*[0-9]+:[ ]*//g' |
-			sed -E 's/[ ]*[(]UUID:[ ]*.+[)]//g' |
-			sort |
-			uniq)
-		n=$(echo "${names}" | wc -l)
-		namelist=$(echo "${names}" |
-			tr '\n' ';' |
-			sed -E 's/;$//g')
-		[ -n "${gpus}" ] && gpus="${gpus};"
-		gpus="${gpus}${namelist}"
-		count=$((count + n))
-	fi
+    # If no GPU's are found, nvidia-smi -L will return an error code.
+    report=$(nvidia-smi -L)
+    if [ $? -eq 0 ]; then
+        names=$(echo "${report}" |
+            sed -E 's/GPU[ ]*[0-9]+:[ ]*//g' |
+            sed -E 's/[ ]*[(]UUID:[ ]*.+[)]//g' |
+            sort |
+            uniq)
+        n=$(echo "${names}" | wc -l)
+        namelist=$(echo "${names}" |
+            tr '\n' ';' |
+            sed -E 's/;$//g')
+        [ -n "${gpus}" ] && gpus="${gpus};"
+        gpus="${gpus}${namelist}"
+        count=$((count + n))
+    fi
 fi
 if [ -n "${rocm_smi}" ]; then
-	# rocm-smi will never return an error code, even if no GPU's were found.
-	# Instead, stdout will be empty with errors in stderr.
-	report=$(rocm-smi -i 2>/dev/null)
-	if [ -n "${report}" ]; then
-		names=$(rocm-smi -i |
-			grep "Device Name" |
-			awk -F':' '{print $3;}' |
-			sed -E 's/^\s*//g' |
-			sort |
-			uniq)
-		n=$(echo "${names}" | wc -l)
-		namelist=$(echo "${names}" |
-			tr '\n' ';' |
-			sed -E 's/;$//g')
-		[ -n "${gpus}" ] && gpus="${gpus};"
-		gpus="${gpus}${namelist}"
-		count=$((count + n))
-	fi
+    # rocm-smi will never return an error code, even if no GPU's were found.
+    # Instead, stdout will be empty with errors in stderr.
+    report=$(rocm-smi -i 2>/dev/null)
+    if [ -n "${report}" ]; then
+        names=$(rocm-smi -i |
+            grep "Device Name" |
+            awk -F':' '{print $3;}' |
+            sed -E 's/^\s*//g' |
+            sort |
+            uniq)
+        n=$(echo "${names}" | wc -l)
+        namelist=$(echo "${names}" |
+            tr '\n' ';' |
+            sed -E 's/;$//g')
+        [ -n "${gpus}" ] && gpus="${gpus};"
+        gpus="${gpus}${namelist}"
+        count=$((count + n))
+    fi
 fi
 
 date=$(date --rfc-3339=seconds)
@@ -173,13 +189,13 @@ host=$(hostname)
 # frontend should always be available.
 version=""
 kitcc=$(grep "C_COMPILER:" "${test_suite}/CMakeCache.txt" |
-	grep -oE "=.+$" |
-	tr -d '=')
+    grep -oE "=.+$" |
+    tr -d '=')
 if [ -n "${kitcc}" ]; then
-	version=$(${kitcc} --version |
-		head -n 1 |
-		grep -oE "version.+$" |
-		sed 's/version[ ]*//g')
+    version=$(${kitcc} --version |
+        head -n 1 |
+        grep -oE "version.+$" |
+        sed 's/version[ ]*//g')
 fi
 
 platform="{
