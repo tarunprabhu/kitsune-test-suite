@@ -68,7 +68,8 @@ PLOT_LABELS = {
 # All known benchmarks in kitsune-test-suite
 # If any benchmarks are added to `Kitsune/Benchmarks`, this list should be
 # updated
-BENCHMARKS = ["copy", "euler3d", "raytracer", "saxpy", "srad", "vecadd"]
+BENCHMARKS = ["copy", "euler3d", "raytracer", "saxpy", "srad", "vecadd",
+              "vecscale"]
 
 # All known metrics collected when building/running the kitsune-test-suite
 # If any additional metrics are collected, this list should be updated. In most

@@ -27,7 +27,7 @@ size_t check(const DualView &vwa, const DualView &vwb, size_t n) {
 
   size_t errors = 0;
   for (size_t i = 0; i < n; ++i)
-    if (checkRelErr(b(i), a(i) * 65, epsilon))
+    if (checkRelErr(b(i), a(i) * CONST_VAL, epsilon))
       errors++;
   return errors;
 }
@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
       const auto &bufb = b.view_device();
       // clang-format off
       Kokkos::parallel_for(n, KOKKOS_LAMBDA(const int i) {
-        bufb(i) = bufa(i) * 65;
+        bufb(i) = bufa(i) * CONST_VAL;
       });
       // clang-format on
       b.modify_device();

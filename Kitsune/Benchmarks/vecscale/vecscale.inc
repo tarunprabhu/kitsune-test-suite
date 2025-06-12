@@ -17,6 +17,8 @@ extern int optind, opterr, optopt;
 
 #include "types.h"
 
+const int CONST_VAL = 65;
+
 static const char *usage = "vecscale [OPTIONS] [n] [iterations]\n"
                            "Try `vecscale -h` for more information";
 
@@ -106,7 +108,7 @@ template <typename Arr>
 static size_t check(const Arr &a, const Arr &b, size_t n) {
   size_t errors = 0;
   for (size_t i = 0; i < n; i++)
-    if (checkRelErr(b[i], a[i] * 65, epsilon))
+    if (checkRelErr(b[i], a[i] * CONST_VAL, epsilon))
       errors++;
   return errors;
 }

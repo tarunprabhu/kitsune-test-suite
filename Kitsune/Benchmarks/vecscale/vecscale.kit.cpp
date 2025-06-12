@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
     total.start();
     // clang-format off
     forall(int i = 0; i < n; i++) {
-      b[i] = a[i] * 65;
+      b[i] = a[i] * CONST_VAL;
     }
     // clang-format on
     uint64_t us = total.stop();

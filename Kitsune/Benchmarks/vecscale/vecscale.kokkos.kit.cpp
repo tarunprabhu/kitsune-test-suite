@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
       total.start();
       // clang-format off
       Kokkos::parallel_for(n, KOKKOS_LAMBDA(const int i) {
-        bufb[i] = bufa[i] * 65;
+        bufb[i] = bufa[i] * CONST_VAL;
       });
       // clang-format on
       uint64_t us = total.stop();

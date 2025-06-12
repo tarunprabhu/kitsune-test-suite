@@ -8,10 +8,10 @@
 
 #include "vecscale.inc"
 
-__global__ void vecscale(const ElementType *a, const ElementType *b, size_t n) {
+__global__ void vecscale(const ElementType *a, ElementType *b, size_t n) {
   size_t i = blockDim.x * blockIdx.x + threadIdx.x;
   if (i < n)
-    b[i] = a[i] * 65;
+    b[i] = a[i] * CONST_VAL;
 }
 
 int main(int argc, char *argv[]) {
