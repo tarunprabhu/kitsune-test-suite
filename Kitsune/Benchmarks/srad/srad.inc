@@ -179,6 +179,18 @@ static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   (void)hipFree(dS);
   (void)hipFree(dW);
   (void)hipFree(dE);
+#elif defined(_OPENMP)
+  free(I);
+  free(J);	
+  free(c);
+  free(iN);
+  free(iS);
+  free(jW);
+  free(jE);
+  free(dN);
+  free(dS);
+  free(dW);
+  free(dE);
 #else
   I.free();
   J.free();
@@ -224,6 +236,18 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   (void)hipMallocManaged(&dS, size_I * sizeof(float));
   (void)hipMallocManaged(&dW, size_I * sizeof(float));
   (void)hipMallocManaged(&dE, size_I * sizeof(float));
+#elif defined(_OPENMP)
+  I  = (float*)malloc(size_I * sizeof(float));
+  J  = (float*)malloc(size_I * sizeof(float));
+  c  = (float*)malloc(size_I * sizeof(float));
+  iN = (int*)malloc(rows * sizeof(int));
+  iS = (int*)malloc(rows * sizeof(int));
+  jW = (int*)malloc(cols * sizeof(int));
+  jE = (int*)malloc(cols * sizeof(int));
+  dN = (float*)malloc(size_I * sizeof(float));
+  dS = (float*)malloc(size_I * sizeof(float));
+  dW = (float*)malloc(size_I * sizeof(float));
+  dE = (float*)malloc(size_I * sizeof(float));
 #else
   I.alloc(size_I);
   J.alloc(size_I);
@@ -349,6 +373,7 @@ static size_t footer(TimerGroup &tg, FArr &I, FArr &J, FArr &c, IArr &iN,
   std::string checkFile = cpuRefFile;
 #if defined(__CUDACC__) || defined(__HIP__) || defined(__KOKKOS__)
   checkFile = gpuRefFile;
+#elif defined(_OPENMP)
 #else
   std::string tt = __kitsune_tt__;
   if (tt == "cuda" or tt == "hip")

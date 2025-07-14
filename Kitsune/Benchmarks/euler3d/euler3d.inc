@@ -140,6 +140,14 @@ static void alloc(FArr &ff_variable, FArr &areas,
   (void)hipMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
   (void)hipMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
   (void)hipMallocManaged(&step_factors, nelr * sizeof(float));
+#elif defined(_OPENMP)
+  areas = (float*)malloc(nelr * sizeof(float));
+  elements_surrounding_elements = (int*)malloc(nelr * NNB * sizeof(int));
+  normals = (float*)malloc(nelr * NDIM * NNB * sizeof(float));
+  variables = (float*)malloc(nelr * NVAR * sizeof(float));
+  old_variables = (float*)malloc(nelr * NVAR * sizeof(float));
+  fluxes = (float*)malloc(nelr * NVAR * sizeof(float));
+  step_factors = (float*)malloc(nelr * sizeof(float));
 #else
   areas.alloc(nelr);
   elements_surrounding_elements.alloc(nelr * NNB);
@@ -175,6 +183,15 @@ static void dealloc(FArr &ff_variable, FArr &areas,
   (void)hipFree(old_variables);
   (void)hipFree(fluxes);
   (void)hipFree(step_factors);
+#elif defined(_OPENMP)
+  free(ff_variable);
+  free(areas);
+  free(elements_surrounding_elements);
+  free(normals);
+  free(variables);
+  free(old_variables);
+  free(fluxes);
+  free(step_factors);
 #else
   ff_variable.free();
   areas.free();
@@ -213,6 +230,8 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
   cudaMallocManaged(&ff_variable, NVAR * sizeof(float));
 #elif defined(__HIP__)
   (void)hipMallocManaged(&ff_variable, NVAR * sizeof(float));
+#elif defined(_OPENMP)
+  ff_variable = (float*)malloc(NVAR * sizeof(float));
 #else
   ff_variable.alloc(NVAR);
 #endif
@@ -392,6 +411,7 @@ static bool footer(const TimerGroup &tg, FArr &ff_variable, FArr &areas,
   std::string checkFile = cpuRefFile;
 #if defined(__CUDACC__) || defined(__HIP__) || defined(__KOKKOS__)
   checkFile = gpuRefFile;
+#elif defined(_OPENMP)
 #else
   std::string tt = __kitsune_tt__;
   if (tt == "cuda" or tt == "hip")

@@ -130,6 +130,9 @@ static void dealloc(Img &img, RawImg &rawImg) {
 #elif defined(__HIP__)
   (void)hipFree(img);
   (void)hipFree(rawImg);
+#elif defined(_OPENMP)
+  free(img);
+  free(rawImg);
 #else
   img.free();
   rawImg.free();
@@ -147,6 +150,9 @@ static void alloc(Img &img, RawImg &rawImg, unsigned imageWidth,
 #elif defined(__HIP__)
   (void)hipMallocManaged(&img, imageSize * sizeof(Pixel));
   (void)hipMallocManaged(&rawImg, imageSize * sizeof(Vec));
+#elif defined(_OPENMP)
+  img = (Pixel*)malloc(imageSize * sizeof(Pixel));
+  rawImg = (Vec*)malloc(imageSize * sizeof(Vec));
 #else
   img.alloc(imageSize);
   rawImg.alloc(imageSize);
@@ -256,6 +262,7 @@ static int footer(TimerGroup &tg, Img &img, RawImg &rawImg, unsigned imageWidth,
   std::string checkFile = cpuRefFile;
 #if defined(__CUDACC__) || defined(__HIP__) || defined(__KOKKOS__)
   checkFile = gpuRefFile;
+#elif defined(_OPENMP)
 #else
   std::string tt = __kitsune_tt__;
   if (tt == "cuda" or tt == "hip")
