@@ -121,6 +121,10 @@ template <typename Arr> static void alloc(Arr &a, Arr &b, Arr &c, size_t n) {
   (void)hipMallocManaged(&a, n * sizeof(ElementType));
   (void)hipMallocManaged(&b, n * sizeof(ElementType));
   (void)hipMallocManaged(&c, n * sizeof(ElementType));
+#elif defined(_OPENMP)
+  a = (ElementType*)malloc(n * sizeof(ElementType));
+  b = (ElementType*)malloc(n * sizeof(ElementType));
+  c = (ElementType*)malloc(n * sizeof(ElementType));
 #else
   a.alloc(n);
   b.alloc(n);
@@ -155,6 +159,10 @@ template <typename Arr> static void dealloc(Arr &a, Arr &b, Arr &c) {
   (void)hipFree(a);
   (void)hipFree(b);
   (void)hipFree(c);
+#elif defined(_OPENMP)
+  free(a);
+  free(b);
+  free(c);
 #else  // CPU
   a.free();
   b.free();
