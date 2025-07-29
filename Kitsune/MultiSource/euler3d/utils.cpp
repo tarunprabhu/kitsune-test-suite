@@ -12,6 +12,7 @@ void cpy(kitsune::mobile_ptr<float> dst, kitsune::mobile_ptr<float> src,
   // clang-format on
 }
 
+[[kitsune::device]]
 void compute_flux_contribution(const float density, const Float3 &momentum,
                                const float density_energy, const float pressure,
                                Float3 &velocity, Float3 &fc_momentum_x,
@@ -35,22 +36,26 @@ void compute_flux_contribution(const float density, const Float3 &momentum,
   fc_density_energy.z = velocity.z * de_p;
 }
 
+[[kitsune::device]]
 void compute_velocity(float density, const Float3 &momentum, Float3 &velocity) {
   velocity.x = momentum.x / density;
   velocity.y = momentum.y / density;
   velocity.z = momentum.z / density;
 }
 
+[[kitsune::device]]
 float compute_speed_sqd(const Float3 &velocity) {
   return velocity.x * velocity.x + velocity.y * velocity.y +
          velocity.z * velocity.z;
 }
 
+[[kitsune::device]]
 float compute_pressure(float density, float density_energy, float speed_sqd) {
   return (float(GAMMA) - float(1.0f)) *
          (density_energy - float(0.5f) * density * speed_sqd);
 }
 
+[[kitsune::device]]
 float compute_speed_of_sound(float density, float pressure) {
   return sqrtf(float(GAMMA) * pressure / density);
 }

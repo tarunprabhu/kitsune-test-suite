@@ -9,6 +9,10 @@ kitsune_multisource(euler3d-multifile targets EXECUTABLE LTO
   CMDARGS -c ${refc} -g ${refg} ${input} 50
   DATA ${input} ${refc} ${refg})
 
+kitsune_multisource(euler3d-multifile targets EXECUTABLE
+  CMDARGS -c ${refc} -g ${refg} ${input} 50
+  DATA ${input} ${refc} ${refg})
+
 foreach (target IN LISTS targets)
   target_sources(${target} PUBLIC
     compute_flux.cpp
