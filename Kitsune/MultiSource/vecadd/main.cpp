@@ -8,9 +8,7 @@
 
 #include "../../Benchmarks/vecadd/vecadd.inc"
 
-void vecadd(kitsune::mobile_ptr<ElementType> c,
-            const kitsune::mobile_ptr<ElementType> a,
-            const kitsune::mobile_ptr<ElementType> b, size_t n);
+ElementType add(ElementType a, ElementType b);
 
 int main(int argc, char *argv[]) {
   size_t n;
@@ -27,7 +25,11 @@ int main(int argc, char *argv[]) {
 
   for (unsigned t = 0; t < iterations; t++) {
     total.start();
-    vecadd(c, a, b, n);
+    // clang-format off
+    forall(size_t i = 0; i < n; ++i) {
+      c[i] = add(a[i], b[i]);
+    }
+    // clang-format on
     uint64_t us = total.stop();
     std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
   }

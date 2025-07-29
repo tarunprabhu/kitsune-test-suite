@@ -5,7 +5,7 @@ set(base euler3d.ref)
 set(refc "${base}.cpu.dat")
 set(refg "${base}.gpu.dat")
 
-kitsune_multisource(euler3d-multifile targets EXECUTABLE
+kitsune_multisource(euler3d-multifile targets EXECUTABLE LTO
   CMDARGS -c ${refc} -g ${refg} ${input} 50
   DATA ${input} ${refc} ${refg})
 

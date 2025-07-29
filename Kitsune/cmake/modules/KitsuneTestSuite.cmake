@@ -354,6 +354,7 @@ endfunction()
 #     tapir_target  The tapir target. This must be a target that is a valid
 #                   argument of the --tapir flag
 #     kokkos        If ON, kokkos mode should be enabled on the target
+#     lto           If ON, compile and link with -flto
 #     cmdargs       A list of command line arguments to be passed when running
 #                   the test
 #     data          A list of files containing that will be used by the test.
@@ -363,13 +364,18 @@ endfunction()
 #
 #     out           The list to which to append the target that was created
 #
-macro(make_target base type tapir_target kokkos out)
-  set(target)
-  if (kokkos)
-    set(target "${base}-kokkos-${tapir_target}")
-  else ()
-    set(target "${base}-unknown-${tapir_target}")
+macro(make_target base type tapir_target kokkos lto out)
+  set(kokkos_part "-default")
+  if (${kokkos_part})
+    set(kokkos_part "-kokkos")
   endif ()
+
+  set(lto_part)
+  if (${lto})
+    set(lto_part "-lto")
+  endif ()
+
+  set(target "${base}${kokkos_part}${lto_part}-${tapir_target}")
 
   if (type STREQUAL "EXECUTABLE")
     # The executable target will be created by register_test().
@@ -383,13 +389,17 @@ macro(make_target base type tapir_target kokkos out)
   target_include_directories(${target} PUBLIC
     ${CMAKE_SOURCE_DIR}/Kitsune/include)
 
-  set(tapir_flags "--tapir=${tapir_target}")
+  set(tapir_opts "--tapir=${tapir_target}")
+  set(lto_opts)
+  if (${lto})
+    set(lto_opts "-flto")
+  endif ()
 
-  target_compile_options(${target} BEFORE PUBLIC -flto ${tapir_flags})
+  target_compile_options(${target} BEFORE PUBLIC ${lto_opts} ${tapir_opts})
   target_link_options(${target} PUBLIC
-    -flto ${tapir_flags} ${KITSUNE_LINKER_FLAGS})
+    ${lto_opts} ${tapir_opts} ${KITSUNE_LINKER_FLAGS})
 
-  if (kokkos)
+  if (${kokkos})
     target_compile_options(${target} BEFORE PUBLIC -fkokkos -fkokkos-no-init)
     target_link_options(${target} BEFORE PUBLIC -fkokkkos)
   endif ()
@@ -444,7 +454,7 @@ endmacro ()
 #     out        The list of targets that were created
 #
 function (kitsune_multisource base out)
-  cmake_parse_arguments(KIT "EXECUTABLE;SHARED;STATIC;KOKKOS" "" "CMDARGS;DATA" ${ARGN})
+  cmake_parse_arguments(KIT "EXECUTABLE;SHARED;STATIC;KOKKOS;LTO" "" "CMDARGS;DATA" ${ARGN})
   set(cmdargs "${KIT_CMDARGS}")
   set(data "${KIT_DATA}")
 
@@ -459,41 +469,40 @@ function (kitsune_multisource base out)
     message(FATAL_ERROR "Unknown multisource target type")
   endif ()
 
-  set(targets)
   if (KIT_KOKKOS)
     if (TEST_CUDA_TARGET)
-      make_target(${base} ${type} "cuda" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "cuda" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif ()
     if (TEST_HIP_TARGET)
-      make_target(${base} ${type} "hip" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "hip" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif()
   else ()
     if (TEST_CUDA_TARGET)
-      make_target(${base} ${type} "cuda" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "cuda" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif ()
     if (TEST_HIP_TARGET)
-      make_target(${base} ${type} "hip" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "hip" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif()
     if (TEST_LAMBDA_TARGET)
-      make_target(${base} ${type} "lambda" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "lambda" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif ()
     if (TEST_OMPTASK_TARGET)
-      make_target(${base} ${type} "omptask" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "omptask" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif ()
     if (TEST_OPENCILK_TARGET)
-      make_target(${base} ${type} "opencilk" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "opencilk" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif()
     if (TEST_OPENMP_TARGET)
-      make_target(${base} ${type} "openmp" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "openmp" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif ()
     if (TEST_QTHREADS_TARGET)
-      make_target(${base} ${type} "qthreads" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "qthreads" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif ()
     if (TEST_REALM_TARGET)
-      make_target(${base} ${type} "realm" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "realm" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif ()
     if (TEST_SERIAL_TARGET)
-      make_target(${base} ${type} "serial" ${KIT_KOKKOS} targets)
+      make_target(${base} ${type} "serial" ${KIT_KOKKOS} ${KIT_LTO} targets)
     endif ()
   endif ()
 

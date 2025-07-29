@@ -9,8 +9,8 @@ import sys
 
 # The regular expression to extract the name of the test and the tapir target
 # from the name of the test script file. The name of the test is the first
-# match, the tapir target is the third.
-re_kit_test = re.compile('^(.+?)-(c|cxx|fortran|kokkos|unknown)-(.+?)[.]test$')
+# match, the tapir target is the fourth.
+re_kit_test = re.compile('^(.+?)-(c|cxx|fortran|kokkos|default)(-lto)?-(.+?)[.]test$')
 
 # The result expression to extract the name of the test and the language from
 # name of the test script file. This name of the language is guaranteed to be
@@ -19,20 +19,23 @@ re_vanilla_test = re.compile(
     '^(.+)-(nvcc|hipcc|kokkos-nvidia|kokkos-amd)[.]test$'
 )
 
-# Get the test name. The argument is a path to a .test file. In the case of a
-# Benchmark or MultiSource test, the test name will be the name of the directory
-# containing the .test file. For tests in the SingleSource directory, the base
-# name will be of the form <test-name>-kit-<tapir-target>.test. Everything in
-# the Kitsune/SingleSource directory is guaranteed to be a Kitsune test. Some
-# tests in the MultiSource directory may have the same name as those in the
-# SingleSource or Benchmark directories. In this case, tag them with a multifile
-# suffix to ensure that we know what they are. We care about those because they
-# use LTO, so we would like them to be distinct.
+# Get the test name. The argument is a path to a .test file. In the case of
+# tests from the Benchmarks directory, the test name will be the name of the
+# directory containing the .test file. For tests in the SingleSource directory,
+# the name will be of the form <test-name>-kit-<tapir-target>.test. Tests from
+# the Kitsune/MultiSource directory will have "-multifile" appended to the base
+# (directory) name and an optional "-lto" suffix if they have been compiled with
+# LTO.
 def get_name(base: str) -> str:
     if base.startswith('Kitsune/Benchmarks'):
         return os.path.basename(os.path.dirname(base))
     elif base.startswith('Kitsune/MultiSource'):
-        return f'{os.path.basename(os.path.dirname(base))}-multifile'
+        b = os.path.basename(base)
+        m = re_kit_test.match(b)
+        if not m:
+            sys.exit(f'Unexpected multi-source test name: {b}')
+        lto = '-lto' if m[3] else ''
+        return f'{m[1]}{lto}'
     elif base.startswith('Kitsune/SingleSource'):
         b = os.path.basename(base)
         m = re_kit_test.match(b)
@@ -52,8 +55,8 @@ def get_tapir_target(base: str) -> str:
     if not m:
         sys.exit(f'Could not get tapir target: {base}')
     if m[2] == 'kokkos':
-        return 'kokkos-' + m[3]
-    return m[3]
+        return 'kokkos-' + m[4]
+    return m[4]
 
 # Get either the tapir target or the language name from the test name. The
 # argument is the path to a .test file. Some of the benchmarks are straight cuda
@@ -223,8 +226,8 @@ def sanity_check(args):
 def parse_command_line_args():
     prog = 'kit-combine'
     descr = (
-        'Combine Kitsune test suite reports. When the test suite is run, the'
-        'the "interesting" reports are spread across several files. This will'
+        'Combine Kitsune test suite reports. When the test suite is run, the '
+        '"interesting" reports are spread across several files. This will '
         'generate a combined report, in JSON, with data collected from the '
         'various files. Not all of the data from the various files will be '
         'included in the result'

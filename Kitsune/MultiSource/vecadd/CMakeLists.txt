@@ -1,5 +1,7 @@
 include(KitsuneTestSuite)
 
+kitsune_multisource(vecadd-multifile targets EXECUTABLE LTO
+  CMDARGS 1024)
 kitsune_multisource(vecadd-multifile targets EXECUTABLE
   CMDARGS 1024)
 
