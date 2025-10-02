@@ -19,7 +19,7 @@ static void random_fill(mobile_ptr<Vec> data, size_t n) {
   }
 }
 
-__attribute__((always_inline)) Vec vec_sum(const Vec &a, const Vec &b) {
+static Vec vec_sum(const Vec &a, const Vec &b) {
   Vec sum;
   sum.x = a.x + b.x;
   sum.y = a.y + b.y;

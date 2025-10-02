@@ -11,29 +11,33 @@
 
 struct Vec {
   float x, y, z;
-  __attribute__((always_inline)) Vec(float v = 0) { x = y = z = v; }
-  __attribute__((always_inline)) Vec(float a, float b, float c = 0.0f) {
+  Vec(float v = 0) { x = y = z = v; }
+  Vec(float a, float b, float c = 0.0f) {
     x = a;
     y = b;
     z = c;
   }
-  __attribute__((always_inline)) Vec operator+(const Vec r) const {
+
+  Vec operator+(const Vec r) const {
     return Vec(x + r.x, y + r.y, z + r.z);
   }
-  __attribute__((always_inline)) Vec operator*(const Vec r) const {
+
+  Vec operator*(const Vec r) const {
     return Vec(x * r.x, y * r.y, z * r.z);
   }
-  __attribute__((always_inline)) float operator%(const Vec r) const {
+
+  float operator%(const Vec r) const {
     return x * r.x + y * r.y + z * r.z;
   }
-  __attribute__((always_inline)) Vec operator!() {
+
+  Vec operator!() {
     return *this * (1.0 / sqrtf(*this % *this));
   }
 };
 
 #include "raytracer.inc"
 
-inline __attribute__((always_inline)) static float randomVal(unsigned int &x) {
+static float randomVal(unsigned int &x) {
   x = (214013 * x + 2531011);
   return ((x >> 16) & 0x7FFF) / 66635.0f;
 }
@@ -41,8 +45,7 @@ inline __attribute__((always_inline)) static float randomVal(unsigned int &x) {
 // Rectangle CSG equation. Returns minimum signed distance from
 // space carved bylowerLeft vertex and opposite rectangle vertex
 // upperRight.
-inline __attribute__((always_inline)) static float
-boxTest(const Vec &position, Vec lowerLeft, Vec upperRight) {
+static float boxTest(const Vec &position, Vec lowerLeft, Vec upperRight) {
   lowerLeft = position + lowerLeft * -1.0f;
   upperRight = upperRight + position * -1.0f;
   return -fminf(
@@ -51,8 +54,7 @@ boxTest(const Vec &position, Vec lowerLeft, Vec upperRight) {
 }
 
 // Sample the world using Signed Distance Fields.
-inline __attribute__((always_inline)) static float
-queryDatabase(const Vec &position, int &hitType) {
+static float queryDatabase(const Vec &position, int &hitType) {
   float distance = 1e9; // FLT_MAX;
   Vec f = position;     // Flattened position (z=0)
   f.z = 0;
@@ -98,10 +100,8 @@ queryDatabase(const Vec &position, int &hitType) {
 
 // Perform signed sphere marching
 // Returns hitType 0, 1, 2, or 3 and update hit position/normal
-inline __attribute__((always_inline)) int rayMarching(const Vec &origin,
-                                                      const Vec &direction,
-                                                      Vec &hitPos,
-                                                      Vec &hitNorm) {
+static int rayMarching(const Vec &origin, const Vec &direction, Vec &hitPos,
+                       Vec &hitNorm) {
   int hitType = HIT_NONE;
   int noHitCount = 0;
 
@@ -120,8 +120,7 @@ inline __attribute__((always_inline)) int rayMarching(const Vec &origin,
   return HIT_NONE;
 }
 
-inline __attribute__((always_inline)) Vec trace(Vec origin, Vec direction,
-                                                unsigned int &rn) {
+static Vec trace(Vec origin, Vec direction, unsigned int &rn) {
   Vec sampledPosition;
   Vec normal;
   Vec color(0.0f, 0.0f, 0.0f);
