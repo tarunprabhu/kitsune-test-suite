@@ -61,36 +61,29 @@ intended as benchmarks. NOTE: This may skip some correctness checks"
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 # Build and run the vanilla cuda (.cu) tests
-set(TEST_VANILLA_CUDA OFF)
+set(TEST_VANILLA_cuda OFF)
 
 # Build and run the vanilla hip (.hip) tests
-set(TEST_VANILLA_HIP OFF)
+set(TEST_VANILLA_hip OFF)
 
 # Build and run the Kokkos tests with a vanilla (non-Kitsune) compiler where
 # Kokkos has been built with the cuda backend.
-set(TEST_VANILLA_KOKKOS_CUDA OFF)
+set(TEST_VANILLA_KOKKOS_cuda OFF)
 
 # Build and run the Kokkos tests with a vanilla (non-Kitsune) compile where
 # Kokkos has been built with the hip backend.
-set(TEST_VANILLA_KOKKOS_HIP OFF)
+set(TEST_VANILLA_KOKKOS_hip OFF)
 
 # Build and run the Fortran tests with a vanilla (non-Kitsune) compiler
 set(TEST_VANILLA_Fortran OFF)
 
+# The frontends to test
 set(TEST_C OFF)
 set(TEST_CXX OFF)
 set(TEST_Fortran OFF)
 
+# The special modes to test
 set(TEST_KOKKOS_MODE OFF)
-set(TEST_CUDA_TARGET OFF)
-set(TEST_HIP_TARGET OFF)
-set(TEST_LAMBDA_TARGET OFF)
-set(TEST_OMPTASK_TARGET OFF)
-set(TEST_OPENCILK_TARGET OFF)
-set(TEST_OPENMP_TARGET OFF)
-set(TEST_QTHREADS_TARGET OFF)
-set(TEST_REALM_TARGET OFF)
-set(TEST_SERIAL_TARGET OFF)
 
 # The compiler options to use with the various frontends. These will be a
 # combination of any default options required by Kitsune, those required to
@@ -250,7 +243,6 @@ if (TEST_Fortran)
   find_program(FLANG flang flang-new REQUIRED
     PATHS ${COMPILER_BINDIR}
     NO_DEFAULT_PATH)
-
   message(STATUS "Testing language: Fortran")
 endif ()
 
@@ -281,15 +273,21 @@ execute_process(COMMAND "${KIT_CONFIG}" --known-tapir-targets
   COMMAND_ERROR_IS_FATAL ANY)
 string(REPLACE " " ";" KNOWN_TAPIR_TARGETS "${KNOWN_TAPIR_TARGETS_STR}")
 
-foreach (TAPIR_TARGET ${KITSUNE_TEST_TAPIR_TARGETS})
-  if (NOT ${TAPIR_TARGET} IN_LIST KNOWN_TAPIR_TARGETS)
-    message(FATAL_ERROR "Unknown tapir target: ${TAPIR_TARGET}")
+# For every known tapir target TT create a variable named TEST_<TT>_TARGET.
+# Set this to OFF. If the target has been enabled, it will be set to ON.
+foreach (TT ${KNOWN_TAPIR_TARGETS})
+  set("TEST_${TT}_TARGET" OFF)
+endforeach()
+
+foreach (TT ${KITSUNE_TEST_TAPIR_TARGETS})
+  if (NOT ${TT} IN_LIST KNOWN_TAPIR_TARGETS)
+    message(FATAL_ERROR "Unknown tapir target: ${TT}")
   endif ()
 endforeach ()
 
-foreach (TAPIR_TARGET ${KITSUNE_SKIP_TAPIR_TARGETS})
-  if (NOT ${TAPIR_TARGET} IN_LIST KNOWN_TAPIR_TARGETS)
-    message(FATAL_ERROR "Unknown tapir target: ${TAPIR_TARGET}")
+foreach (TT ${KITSUNE_SKIP_TAPIR_TARGETS})
+  if (NOT ${TT} IN_LIST KNOWN_TAPIR_TARGETS)
+    message(FATAL_ERROR "Unknown tapir target: ${TT}")
   endif ()
 endforeach ()
 
@@ -308,21 +306,23 @@ if (KITSUNE_TEST_TAPIR_TARGETS STREQUAL "")
   set(TEST_TAPIR_TARGETS "${ENABLED_TAPIR_TARGETS}")
 else ()
   string(REPLACE " " ";" TEST_TAPIR_TARGETS "${KITSUNE_TEST_TAPIR_TARGETS}")
-  foreach (tapir_target ${TEST_TAPIR_TARGETS})
-    if (NOT tapir_target IN_LIST ENABLED_TAPIR_TARGETS)
-      message(FATAL_ERROR "'${tapir_target}' has not been enabled")
+  foreach (TT ${TEST_TAPIR_TARGETS})
+    if (NOT TT IN_LIST ENABLED_TAPIR_TARGETS)
+      message(FATAL_ERROR "'${TT}' has not been enabled")
     endif ()
   endforeach ()
 endif ()
 
 # Filter out any tapir targets to skip.
-foreach (tapir_target ${SKIP_TAPIR_TARGETS})
-  message(STATUS "Skipping tapir target: ${tapir_target}")
-  list(REMOVE_ITEM TEST_TAPIR_TARGETS ${tapir_target})
+foreach (TT ${SKIP_TAPIR_TARGETS})
+  message(STATUS "Skipping tapir target: ${TT}")
+  list(REMOVE_ITEM TEST_TAPIR_TARGETS ${TT})
 endforeach ()
 
-foreach (tapir_target ${TEST_TAPIR_TARGETS})
-  if (tapir_target STREQUAL "cuda")
+# If any tapir targets need special handling, do it here, otherwise, just set
+# the corresponding TEST_${TT}_TARGET variable to ON.
+foreach (TT ${TEST_TAPIR_TARGETS})
+  if (TT STREQUAL "cuda")
     # If the cuda target has been built, but the device on which this is run
     # does not have an NVIDIA GPU, skip the cuda target.
     #
@@ -345,16 +345,16 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
       list(GET NVPTX_ARCHS 0 NVIDIA_ARCH)
       message(STATUS "NVIDIA GPU found: ${NVIDIA_ARCH}")
       message(STATUS "Testing tapir target: cuda")
-      set(TEST_CUDA_TARGET ON)
+      set(TEST_cuda_TARGET ON)
     elseif (NUM_NVIDIA_GPUS EQUAL 0)
       message(WARNING "No NVIDIA GPU's found! Skipping tapir target: cuda")
-      set(TEST_CUDA_TARGET OFF)
+      set(TEST_cuda_TARGET OFF)
     else ()
       message(WARNING "NVIDIA GPU's with different architectures found: \
 '${NVPTX_ARCHS}'! Skipping tapir target: cuda")
-      set(TEST_CUDA_TARGET OFF)
+      set(TEST_cuda_TARGET OFF)
     endif ()
-  elseif (tapir_target STREQUAL "hip")
+  elseif (TT STREQUAL "hip")
     # If the cuda target has been built, but the device on which this is run
     # does not have an AMD GPU, skip the hip target.
     #
@@ -377,45 +377,30 @@ foreach (tapir_target ${TEST_TAPIR_TARGETS})
       list(GET AMDGPU_ARCHS 0 AMD_ARCH)
       message(STATUS "AMD GPU found: ${AMD_ARCH}")
       message(STATUS "Testing tapir target: hip")
-      set(TEST_HIP_TARGET ON)
+      set(TEST_hip_TARGET ON)
     elseif (NUM_AMD_GPUS EQUAL 0)
       message(WARNING "No AMD GPU's found! Skipping tapir target: hip")
-      set(TEST_HIP_TARGET OFF)
+      set(TEST_hip_TARGET OFF)
     else ()
       message(WARNING "AMD GPU's with different architectures found: \
 '${AMDGPU_ARCHS}'! Skipping tapir target: hip")
-      set(TEST_HIP_TARGET OFF)
+      set(TEST_hip_TARGET OFF)
     endif ()
-  elseif (tapir_target STREQUAL "lambda")
-    set(TEST_LAMBDA_TARGET ON)
-    message(STATUS "Testing tapir target: ${tapir_target}")
-  elseif (tapir_target STREQUAL "omptask")
-    set(TEST_OMPTASK_TARGET ON)
-    message(STATUS "Testing tapir target: ${tapir_target}")
-  elseif (tapir_target STREQUAL "opencilk")
-    set(TEST_OPENCILK_TARGET ON)
-    message(STATUS "Testing tapir target: ${tapir_target}")
-  elseif (tapir_target STREQUAL "openmp")
-    set(TEST_OPENMP_TARGET ON)
-    message(STATUS "Testing tapir target: ${tapir_target}")
-  elseif (tapir_target STREQUAL "qthreads")
-    set(TEST_QTHREADS_TARGET ON)
-    message(STATUS "Testing tapir target: ${tapir_target}")
-  elseif (tapir_target STREQUAL "realm")
-    set(TEST_REALM_TARGET ON)
-    message(STATUS "Testing tapir target: ${tapir_target}")
-  elseif (tapir_target STREQUAL "serial")
+  elseif (TT STREQUAL "serial")
     # We never want to test the serial tapir target when in benchmarking mode.
     # The benchmarks are all built to test problem sizes that benefit from
     # parallel execution. The code produced by the serial tapir target is far,
     # far too slow in such cases.
     if (KITSUNE_BENCHMARK)
-      set(TEST_SERIAL_TARGET OFF)
+      set(TEST_serial_TARGET OFF)
       message(STATUS "Skipping tapir target when benchmarking: serial")
     else ()
-      set(TEST_SERIAL_TARGET ON)
-      message(STATUS "Testing tapir target: ${tapir_target}")
+      set(TEST_serial_TARGET ON)
+      message(STATUS "Testing tapir target: ${TT}")
     endif ()
+  elseif (TT IN_LIST KNOWN_TAPIR_TARGETS)
+    set("TEST_${TT}_TARGET" ON)
+    message(STATUS "Testing tapir target: ${TT}")
   else ()
     message(FATAL_ERROR "Unknown tapir target: ${tapir_target}")
   endif ()
@@ -434,8 +419,8 @@ else ()
   set(TEST_KOKKOS_MODE OFF)
 endif ()
 
-if (TEST_CUDA_TARGET AND KITSUNE_BENCHMARK)
-  set(TEST_VANILLA_CUDA ON)
+if (TEST_cuda_TARGET AND KITSUNE_BENCHMARK)
+  set(TEST_VANILLA_cuda ON)
 
   # We could use clang to compile the .cu files, but since this is only useful
   # for performance comparisons, use nvcc since that is expected to be the best
@@ -482,13 +467,13 @@ if (TEST_CUDA_TARGET AND KITSUNE_BENCHMARK)
       PATHS ${KOKKOS_CUDA_PREFIX}/lib ${KOKKOS_CUDA_PREFIX}/lib64
       NO_DEFAULT_PATH)
 
-    set(TEST_VANILLA_KOKKOS_CUDA ON)
+    set(TEST_VANILLA_KOKKOS_cuda ON)
   endif ()
 endif ()
 
 # See the comments for the cuda language tests above. Same goes for hip.
-if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
-  set(TEST_VANILLA_HIP ON)
+if (TEST_hip_TARGET AND KITSUNE_BENCHMARK)
+  set(TEST_VANILLA_hip ON)
 
   # We could use clang to compile the .hip files, but since this is only useful
   # for performance comparisons, use hipcc since that is expected to be the best
@@ -542,7 +527,7 @@ if (TEST_HIP_TARGET AND KITSUNE_BENCHMARK)
       PATHS ${KOKKOS_HIP_PREFIX}/lib ${KOKKOS_HIP_PREFIX}/lib64
       NO_DEFAULT_PATH)
 
-    set(TEST_VANILLA_KOKKOS_HIP ON)
+    set(TEST_VANILLA_KOKKOS_hip ON)
   endif ()
 endif ()
 
