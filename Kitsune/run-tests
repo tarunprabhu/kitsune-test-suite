@@ -92,11 +92,16 @@ ${lit} -s -j 1 -o ${kitsune}/ts-report.json ${kitsune}
 # This should return a non-zero exit code if any tests failed.
 pass=$?
 
-# Use lscpu if available since it may give better information across Linux
-# systems than cpuinfo.
+lscpu=$(command -v lscpu)
+uname=$(command -v uname)
+tr=$(command -v tr)
+if [ -n "${uname}" ] && [ -n "${tr}" ]; then
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+fi
+
 cpu="<<UNKNOWN>>"
 cores="0"
-if command -v lscpu >/dev/null 2>&1; then
+if [ -n "${lscpu}" ]; then
     cpuinfo=$(lscpu)
     cpu=$(echo "${cpuinfo}" |
         grep "Model name" |
@@ -113,7 +118,14 @@ if command -v lscpu >/dev/null 2>&1; then
         grep "Socket(s)\s*:" |
         grep -oE "[0-9]+")
     cores=$((tpc * cps * sockets))
-elif ls -l /proc/cpuinfo >/dev/null 2>&1; then
+elif [ "${os}" = "freebsd" ]; then
+    cpu=$(sysctl hw.model |
+        sed 's/hw.model: //g' |
+        sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    cores=$(sysctl hw.ncpu |
+        sed 's/hw.ncpu://g' |
+        sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+elif [ "${os}" = "linux" ]; then
     cpu=$(cat /proc/cpuinfo |
         grep "model name" |
         sed 's/model name\s*:\s*//g' |
@@ -124,7 +136,7 @@ elif ls -l /proc/cpuinfo >/dev/null 2>&1; then
         sed 's/processor\s*:\s*//g' |
         wc -l)
 else
-    echo "Looking up CPU info on non-Linux platforms is not implemented"
+    echo "Could not determine CPU info"
 fi
 
 nvidia_smi=$(command -v nvidia-smi)
@@ -180,7 +192,7 @@ if [ -n "${rocm_smi}" ]; then
     fi
 fi
 
-date=$(date --rfc-3339=seconds)
+date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 host=$(hostname)
 
 # Determine the version of Kitsune used when building these tests. We cannot
