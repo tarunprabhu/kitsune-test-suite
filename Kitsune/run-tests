@@ -43,6 +43,15 @@ OPTIONS
                 the lit executable from $PATH will be used
 "
 
+trim() {
+    expr='s/^[[:space:]]*//;s/[[:space:]]*$//'
+    if [ $# -eq 0 ]; then
+        cat /dev/stdin | sed ${expr}
+    else
+        echo $1 | sed ${expr}
+    fi
+}
+
 # This will be the Kitsune/ subdirectory within the root of the llvm-test-suite
 # build directory
 kitsune=$(dirname $0)
@@ -118,13 +127,6 @@ if [ -n "${lscpu}" ]; then
         grep "Socket(s)\s*:" |
         grep -oE "[0-9]+")
     cores=$((tpc * cps * sockets))
-elif [ "${os}" = "freebsd" ]; then
-    cpu=$(sysctl hw.model |
-        sed 's/hw.model: //g' |
-        sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    cores=$(sysctl hw.ncpu |
-        sed 's/hw.ncpu://g' |
-        sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 elif [ "${os}" = "linux" ]; then
     cpu=$(cat /proc/cpuinfo |
         grep "model name" |
@@ -135,6 +137,12 @@ elif [ "${os}" = "linux" ]; then
         grep "processor" |
         sed 's/processor\s*:\s*//g' |
         wc -l)
+elif [ "${os}" = "darwin" ]; then
+    cpu=$(sysctl -n machdep.cpu.brand_string | trim)
+    cores=$(sysctl -n hw.ncpu | trim)
+elif [ "${os}" = "freebsd" ]; then
+    cpu=$(sysctl -n hw.model | trim)
+    cores=$(sysctl -n hw.ncpu | trim)
 else
     echo "Could not determine CPU info"
 fi
