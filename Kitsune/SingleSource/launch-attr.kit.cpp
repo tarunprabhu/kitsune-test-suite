@@ -2,6 +2,8 @@
 // result. Only relevant for GPU kernels.
 
 #include <iostream>
+#include <stdint.h>
+
 #include <kitsune.h>
 
 using namespace kitsune;
