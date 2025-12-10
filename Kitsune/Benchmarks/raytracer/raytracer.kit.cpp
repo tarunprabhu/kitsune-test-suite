@@ -9,6 +9,10 @@
 #include "fpcmp.h"
 #include "timing.h"
 
+#if defined(__sun)
+#undef sun
+#endif // __sun
+
 struct Vec {
   float x, y, z;
   __attribute__((always_inline)) Vec(float v = 0) { x = y = z = v; }

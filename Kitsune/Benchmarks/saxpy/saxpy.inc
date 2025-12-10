@@ -6,7 +6,11 @@
 extern "C" {
 #endif // __cplusplus
 
+#if defined(__sun)
+extern int getopt(int, char* const*, const char*);
+#else
 int getopt(int argc, char *argv[], const char *optstring);
+#endif
 
 extern char *optarg;
 extern int optind, opterr, optopt;

@@ -143,6 +143,9 @@ elif [ "${os}" = "darwin" ]; then
 elif [ "${os}" = "freebsd" ]; then
     cpu=$(sysctl -n hw.model | trim)
     cores=$(sysctl -n hw.ncpu | trim)
+elif [ "${os}" = "sunos" ]; then
+    cpu=$(psrinfo -pv | tail -n 1 | trim)
+    cores=$(psrinfo | wc -l | trim)
 else
     echo "Could not determine CPU info"
 fi
