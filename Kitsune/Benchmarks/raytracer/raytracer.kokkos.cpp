@@ -217,7 +217,7 @@ KOKKOS_FORCEINLINE_FUNCTION static Vec trace(Vec origin, Vec direction,
 }
 
 int main(int argc, char **argv) {
-  int mismatch = 0;
+  bool hasErrors = false;
   Kokkos::initialize(argc, argv);
   {
     unsigned sampleCount;
@@ -289,10 +289,10 @@ int main(int argc, char **argv) {
     rawImg.sync_host();
     total.stop();
 
-    mismatch = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,
-                      outFile, cpuRefFile, gpuRefFile);
+    hasErrors = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,
+                       outFile, cpuRefFile, gpuRefFile);
   }
   Kokkos::finalize();
 
-  return mismatch;
+  return hasErrors;
 }

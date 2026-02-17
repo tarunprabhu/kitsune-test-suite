@@ -26,7 +26,7 @@ template <> void randomFill(DualViewFloat &vwI, int rows, int cols) {
 }
 
 int main(int argc, char *argv[]) {
-  int mismatch = 0;
+  bool hasErrors = false;
   Kokkos::initialize(argc, argv);
   {
     int rows, cols, size_I, size_R, niter;
@@ -205,8 +205,8 @@ int main(int argc, char *argv[]) {
     iters.stop();
     total.stop();
 
-    mismatch = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows, cols,
-                      outFile, cpuRefFile, gpuRefFile);
+    hasErrors = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows, cols,
+                       outFile, cpuRefFile, gpuRefFile);
   }
-  return mismatch;
+  return hasErrors;
 }

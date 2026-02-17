@@ -130,9 +130,12 @@ static void dealloc(Img &img, RawImg &rawImg) {
 #elif defined(__HIP__)
   (void)hipFree(img);
   (void)hipFree(rawImg);
-#else
+#elif defined(__kitsune_tt__)
   img.free();
   rawImg.free();
+#else
+  free(img);
+  free(rawImg);
 #endif
 }
 
@@ -147,9 +150,12 @@ static void alloc(Img &img, RawImg &rawImg, unsigned imageWidth,
 #elif defined(__HIP__)
   (void)hipMallocManaged(&img, imageSize * sizeof(Pixel));
   (void)hipMallocManaged(&rawImg, imageSize * sizeof(Vec));
-#else
+#elif defined(__kitsune_tt__)
   img.alloc(imageSize);
   rawImg.alloc(imageSize);
+#else
+  img = (Img)malloc(imageSize * sizeof(Pixel));
+  rawImg = (RawImg)malloc(imageSize * sizeof(Vec));
 #endif
 }
 
@@ -242,10 +248,11 @@ static void saveRaw(const RawImg &rawImg, unsigned imageWidth,
 }
 
 template <typename Img, typename RawImg>
-static int footer(TimerGroup &tg, Img &img, RawImg &rawImg, unsigned imageWidth,
-                  unsigned imageHeight, const std::string &imgFile,
-                  const std::string &outFile, const std::string &cpuRefFile,
-                  const std::string &gpuRefFile) {
+static bool footer(TimerGroup &tg, Img &img, RawImg &rawImg,
+                   unsigned imageWidth, unsigned imageHeight,
+                   const std::string &imgFile, const std::string &outFile,
+                   const std::string &cpuRefFile,
+                   const std::string &gpuRefFile) {
   std::cout << "done\n\n";
   tg.prettyTimes(std::cout, 4);
   std::cout << "----\n\n";
@@ -256,11 +263,11 @@ static int footer(TimerGroup &tg, Img &img, RawImg &rawImg, unsigned imageWidth,
   std::string checkFile = cpuRefFile;
 #if defined(__CUDACC__) || defined(__HIP__) || defined(__KOKKOS__)
   checkFile = gpuRefFile;
-#else
+#elif defined(__kitsune_tt__)
   std::string tt = __kitsune_tt__;
   if (tt == "cuda" or tt == "hip")
     checkFile = gpuRefFile;
-#endif // !__CUDACC__ && !__HIP__
+#endif
 
   int mismatch = 0;
   if (!checkFile.size()) {

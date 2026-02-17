@@ -1,7 +1,6 @@
-#include <filesystem>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
-#include <kitsune.h>
 
 #include "fpcmp.h"
 #include "timing.h"
@@ -9,10 +8,10 @@
 #include "srad.inc"
 
 int main(int argc, char *argv[]) {
-  kitsune::mobile_ptr<float> I, J;
-  kitsune::mobile_ptr<int> iN, iS, jE, jW;
-  kitsune::mobile_ptr<float> dN, dS, dW, dE;
-  kitsune::mobile_ptr<float> c;
+  float *I, *J;
+  int *iN, *iS, *jE, *jW;
+  float *dN, *dS, *dW, *dE;
+  float *c;
   int rows, cols, size_I, size_R, niter;
   float q0sqr, tmp, meanROI, varROI;
   int r1, r2, c1, c2;
@@ -29,20 +28,20 @@ int main(int argc, char *argv[]) {
 
   parseCommandLineInto(argc, argv, niter, rows, cols, r1, r2, c1, c2, lambda,
                        outFile, cpuRefFile, gpuRefFile);
-  header("forall", I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, size_I, size_R,
-         rows, cols, r1, r2, c1, c2, niter);
+  header("for", I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, size_I, size_R, rows,
+         cols, r1, r2, c1, c2, niter);
 
   total.start();
   init.start();
   // clang-format off
-  forall(int i = 0; i < rows; i++) {
+  for (int i = 0; i < rows; i++) {
     iN[i] = i - 1;
     iS[i] = i + 1;
   }
   // clang-format on
 
   // clang-format off
-  forall(int j = 0; j < cols; j++) {
+  for (int j = 0; j < cols; j++) {
     jW[j] = j - 1;
     jE[j] = j + 1;
   }
@@ -54,7 +53,7 @@ int main(int argc, char *argv[]) {
   jE[cols - 1] = cols - 1;
 
   // clang-format off
-  forall(int k = 0; k < size_I; k++) {
+  for (int k = 0; k < size_I; k++) {
     J[k] = std::exp(I[k]);
   }
   // clang-format on
@@ -76,7 +75,7 @@ int main(int argc, char *argv[]) {
     q0sqr = varROI / (meanROI * meanROI);
 
     loop1.start();
-    forall(int i = 0; i < rows; i++) {
+    for (int i = 0; i < rows; i++) {
       for (int j = 0; j < cols; j++) {
         int k = i * cols + j;
         float Jc = J[k];
@@ -109,7 +108,7 @@ int main(int argc, char *argv[]) {
     loop1.stop();
 
     loop2.start();
-    forall(int i = 0; i < rows; i++) {
+    for (int i = 0; i < rows; i++) {
       for (int j = 0; j < cols; j++) {
         // current index
         int k = i * cols + j;

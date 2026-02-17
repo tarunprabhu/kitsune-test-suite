@@ -32,6 +32,6 @@ int main(int argc, char *argv[]) {
     std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
   }
 
-  size_t errors = footer(tg, a, b, c, n);
-  return errors;
+  bool hasErrors = footer(tg, a, b, c, n);
+  return hasErrors;
 }

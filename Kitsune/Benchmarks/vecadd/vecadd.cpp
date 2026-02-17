@@ -1,34 +1,36 @@
-// Straightforward memory copy
+// Simple vector addition benchmark
 
 #include <iostream>
-#include <kitsune.h>
 
+#include "fpcmp.h"
 #include "timing.h"
 
-#include "copy.inc"
+#include "vecadd.inc"
 
 int main(int argc, char *argv[]) {
   size_t n;
   unsigned iterations;
-  kitsune::mobile_ptr<ElementType> dst;
-  kitsune::mobile_ptr<ElementType> src;
+  ElementType* a;
+  ElementType* b;
+  ElementType* c;
 
-  TimerGroup tg("copy");
+  TimerGroup tg("vecadd");
   Timer &total = tg.add("total", "Total");
 
   parseCommandLineInto(argc, argv, n, iterations);
-  header("forall", dst, src, n);
+  header("for", a, b, c, n);
 
   for (unsigned t = 0; t < iterations; t++) {
     total.start();
     // clang-format off
-    forall(size_t i = 0; i < n; i++) {
-      dst[i] = src[i];
+    for (int i = 0; i < n; i++) {
+      c[i] = a[i] + b[i];
     }
+    // clang-format on
     uint64_t us = total.stop();
     std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
   }
 
-  bool hasErrors = footer(tg, dst, src, n);
+  bool hasErrors = footer(tg, a, b, c, n);
   return hasErrors;
 }

@@ -9,7 +9,7 @@
 #include "copy.inc"
 
 int main(int argc, char *argv[]) {
-  size_t errors = 0;
+  bool hasErrors = false;
   Kokkos::initialize(argc, argv);
   {
     size_t n;
@@ -41,9 +41,9 @@ int main(int argc, char *argv[]) {
       std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
     }
 
-    errors = footer(tg, dst, src, n);
+    hasErrors = footer(tg, dst, src, n);
   }
   Kokkos::finalize();
 
-  return errors;
+  return hasErrors;
 }

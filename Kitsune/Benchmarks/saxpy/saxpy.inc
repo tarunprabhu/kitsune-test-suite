@@ -124,11 +124,15 @@ template <typename Arr> static void alloc(Arr &x, Arr &y, Arr &r, size_t n) {
   (void)hipMallocManaged(&x, n * sizeof(ElementType));
   (void)hipMallocManaged(&y, n * sizeof(ElementType));
   (void)hipMallocManaged(&r, n * sizeof(ElementType));
-#else  // CPU
+#elif defined(__kitsune_tt__)
   x.alloc(n);
   y.alloc(n);
   r.alloc(n);
-#endif // CPU
+#else
+  x = (Arr)malloc(n * sizeof(ElementType));
+  y = (Arr)malloc(n * sizeof(ElementType));
+  r = (Arr)malloc(n * sizeof(ElementType));
+#endif
 }
 
 template <typename Arr>
@@ -158,15 +162,19 @@ template <typename Arr> static void dealloc(Arr &x, Arr &y, Arr &r) {
   (void)hipFree(x);
   (void)hipFree(y);
   (void)hipFree(r);
-#else  // CPU
+#elif defined(__kitsune_tt__)
   x.free();
   y.free();
   r.free();
-#endif // CPU
+#else
+  free(x);
+  free(y);
+  free(r);
+#endif
 }
 
 template <typename Arr>
-static size_t footer(TimerGroup &tg, Arr &x, Arr &y, Arr &r, size_t n) {
+static bool footer(TimerGroup &tg, Arr &x, Arr &y, Arr &r, size_t n) {
   char buf[16];
   snprintf(buf, 16, "%.6g", epsilon);
   std::cout << "\n  Checking with epsilon = " << buf << " ..." << std::flush;

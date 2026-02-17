@@ -10,37 +10,38 @@
 
 struct Vec {
   float x, y, z;
-  __forceinline__ __device__ Vec(float v = 0.0f) { x = y = z = v; }
-  __forceinline__ __device__ Vec(float a, float b, float c = 0.0f) {
+  __attribute__((always_inline)) Vec(float v = 0) { x = y = z = v; }
+  __attribute__((always_inline)) Vec(float a, float b, float c = 0.0f) {
     x = a;
     y = b;
     z = c;
   }
-  __forceinline__ __device__ Vec operator+(const Vec r) const {
+  __attribute__((always_inline)) Vec operator+(const Vec r) const {
     return Vec(x + r.x, y + r.y, z + r.z);
   }
-  __forceinline__ __device__ Vec operator*(const Vec r) const {
+  __attribute__((always_inline)) Vec operator*(const Vec r) const {
     return Vec(x * r.x, y * r.y, z * r.z);
   }
-  __forceinline__ __device__ float operator%(const Vec r) const {
+  __attribute__((always_inline)) float operator%(const Vec r) const {
     return x * r.x + y * r.y + z * r.z;
   }
-  __forceinline__ __device__ Vec operator!() {
+  __attribute__((always_inline)) Vec operator!() {
     return *this * (1.0 / sqrtf(*this % *this));
   }
 };
 
 #include "raytracer.inc"
 
-__forceinline__ __device__ float randomVal(unsigned int &x) {
+inline __attribute__((always_inline)) static float randomVal(unsigned int &x) {
   x = (214013 * x + 2531011);
-  return ((x >> 16) & 0x7FFF) / (float)66635;
+  return ((x >> 16) & 0x7FFF) / 66635.0f;
 }
 
-// Rectangle CSG equation. Returns minimum signed distance from space carved by
-// lowerLeft vertex and opposite rectangle vertex upperRight.
-__forceinline__ __device__ float boxTest(const Vec &position, Vec lowerLeft,
-                                         Vec upperRight) {
+// Rectangle CSG equation. Returns minimum signed distance from
+// space carved bylowerLeft vertex and opposite rectangle vertex
+// upperRight.
+inline __attribute__((always_inline)) static float
+boxTest(const Vec &position, Vec lowerLeft, Vec upperRight) {
   lowerLeft = position + lowerLeft * -1.0f;
   upperRight = upperRight + position * -1.0f;
   return -fminf(
@@ -49,8 +50,8 @@ __forceinline__ __device__ float boxTest(const Vec &position, Vec lowerLeft,
 }
 
 // Sample the world using Signed Distance Fields.
-__forceinline__ __device__ float queryDatabase(const Vec &position,
-                                               int &hitType) {
+inline __attribute__((always_inline)) static float
+queryDatabase(const Vec &position, int &hitType) {
   float distance = 1e9; // FLT_MAX;
   Vec f = position;     // Flattened position (z=0)
   f.z = 0;
@@ -70,7 +71,7 @@ __forceinline__ __device__ float queryDatabase(const Vec &position,
   }
 
   distance = sqrtf(distance); // Get real distance, not square distance.
-  distance = powf(powf(distance, 8) + powf(position.z, 8), 0.125f) - 0.5f;
+  distance = powf(powf(distance, 8.0f) + powf(position.z, 8.0f), 0.125f) - 0.5f;
   hitType = HIT_LETTER;
 
   float roomDist;
@@ -96,9 +97,10 @@ __forceinline__ __device__ float queryDatabase(const Vec &position,
 
 // Perform signed sphere marching
 // Returns hitType 0, 1, 2, or 3 and update hit position/normal
-__forceinline__ __device__ int rayMarching(const Vec &origin,
-                                           const Vec &direction, Vec &hitPos,
-                                           Vec &hitNorm) {
+inline __attribute__((always_inline)) int rayMarching(const Vec &origin,
+                                                      const Vec &direction,
+                                                      Vec &hitPos,
+                                                      Vec &hitNorm) {
   int hitType = HIT_NONE;
   int noHitCount = 0;
 
@@ -117,8 +119,8 @@ __forceinline__ __device__ int rayMarching(const Vec &origin,
   return HIT_NONE;
 }
 
-__forceinline__ __device__ Vec trace(Vec origin, Vec direction,
-                                     unsigned int &rn) {
+inline __attribute__((always_inline)) Vec trace(Vec origin, Vec direction,
+                                                unsigned int &rn) {
   Vec sampledPosition;
   Vec normal;
   Vec color(0.0f, 0.0f, 0.0f);
@@ -128,10 +130,10 @@ __forceinline__ __device__ Vec trace(Vec origin, Vec direction,
   for (int bounceCount = 8; bounceCount--;) {
     int hitType = rayMarching(origin, direction, sampledPosition, normal);
     if (hitType == HIT_NONE)
-      break; // No hit. This is over, return color.
-    else if (hitType ==
-             HIT_LETTER) { // Specular bounce on a letter. No color acc.
-      direction = direction + normal * (normal % direction * -2);
+      break; // No hit, return color.
+    else if (hitType == HIT_LETTER) {
+      // Specular bounce on a letter. No color acc.
+      direction = direction + normal * (normal % direction * -2.0f);
       origin = sampledPosition + direction * 0.1f;
       attenuation = attenuation * 0.2f; // Attenuation via distance traveled.
     } else if (hitType == HIT_WALL) {   // Wall hit uses color yellow?
@@ -142,10 +144,8 @@ __forceinline__ __device__ Vec trace(Vec origin, Vec direction,
       float g = normal.z < 0.0f ? -1.0f : 1.0f;
       float u = (-1.0f / (g + normal.z));
       float v = normal.x * normal.y * u;
-      float cosp;
-      float sinp;
-      sinp = sinf(p);
-      cosp = cosf(p);
+      float cosp = cosf(p);
+      float sinp = sinf(p);
       // sincosf(p, &sinp, &cosp);
       direction = Vec(v, g + normal.y * normal.y * u, -normal.y) * (cosp * s) +
                   Vec(1 + g * normal.x * normal.x * u, g * v, -g * normal.x) *
@@ -166,45 +166,6 @@ __forceinline__ __device__ Vec trace(Vec origin, Vec direction,
   return color;
 }
 
-__global__ void Pathtracer(int sampleCount, Pixel *img, Vec *rawImg,
-                           unsigned imgWidth, unsigned imgHeight) {
-  unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < imgWidth * imgHeight) {
-    int x = index % imgWidth;
-    int y = index / imgWidth;
-    const Vec position(-12.0f, 5.0f, 25.0f);
-    const Vec goal = !(Vec(-3.0f, 4.0f, 0.0f) + position * -1.0f);
-    const Vec left = !Vec(goal.z, 0, -goal.x) * (1.0f / imgWidth);
-    // Cross-product to get the up vector
-    const Vec up(goal.y * left.z - goal.z * left.y,
-                 goal.z * left.x - goal.x * left.z,
-                 goal.x * left.y - goal.y * left.x);
-    Vec color;
-    for (unsigned int p = sampleCount, v = index; p--;) {
-      Vec rand_left = Vec(randomVal(v), randomVal(v), randomVal(v)) * .001;
-      float xf = x + randomVal(v);
-      float yf = y + randomVal(v);
-      color = color + trace(position,
-                            !((goal + rand_left) +
-                              left * ((xf - imgWidth / 2.0f) + randomVal(v)) +
-                              up * ((yf - imgHeight / 2.0f) + randomVal(v))),
-                            v);
-    }
-    // Reinhard tone mapping
-    color = color * (1.0f / sampleCount) + 14.0f / 241.0f;
-
-    // Save the pre-quantized image.
-    rawImg[index] = color;
-
-    Vec o = color + 1.0f;
-    color = Vec(color.x / o.x, color.y / o.y, color.z / o.z) * 255.0f;
-
-    img[index].r = (unsigned char)color.x;
-    img[index].g = (unsigned char)color.y;
-    img[index].b = (unsigned char)color.z;
-  }
-}
-
 int main(int argc, char **argv) {
   unsigned sampleCount;
   unsigned imageWidth;
@@ -213,26 +174,52 @@ int main(int argc, char **argv) {
   std::string outFile;
   std::string cpuRefFile;
   std::string gpuRefFile;
-  Pixel *img = nullptr;
-  Vec *rawImg = nullptr;
-  unsigned threadsPerBlock;
+  Pixel* img;
+  Vec* rawImg;
 
   parseCommandLineInto(argc, argv, sampleCount, imageWidth, imageHeight,
-                       imgFile, outFile, cpuRefFile, gpuRefFile,
-                       &threadsPerBlock);
+                       imgFile, outFile, cpuRefFile, gpuRefFile);
 
   TimerGroup tg("raytracer");
   Timer &total = tg.add("total", "Total");
 
-  header("cuda", img, rawImg, sampleCount, imageWidth, imageHeight);
+  header("for", img, rawImg, sampleCount, imageWidth, imageHeight);
 
   total.start();
-  unsigned totalPixels = imageWidth * imageHeight;
-  unsigned blocksPerGrid =
-      (totalPixels + threadsPerBlock - 1) / threadsPerBlock;
-  Pathtracer<<<blocksPerGrid, threadsPerBlock>>>(sampleCount, img, rawImg,
-                                                 imageWidth, imageHeight);
-  cudaDeviceSynchronize();
+  for (unsigned int i = 0; i < imageWidth * imageHeight; ++i) {
+    int x = i % imageWidth;
+    int y = i / imageWidth;
+
+    const Vec position(-12.0f, 5.0f, 25.0f);
+    const Vec goal = !(Vec(-3.0f, 4.0f, 0.0f) + position * -1.0f);
+    const Vec left = !Vec(goal.z, 0, -goal.x) * (1.0f / imageWidth);
+    // Cross-product to get the up vector
+    const Vec up(goal.y * left.z - goal.z * left.y,
+                 goal.z * left.x - goal.x * left.z,
+                 goal.x * left.y - goal.y * left.x);
+    Vec color;
+    for (unsigned int p = sampleCount, v = i; p--;) {
+      Vec rand_left = Vec(randomVal(v), randomVal(v), randomVal(v)) * .001;
+      float xf = x + randomVal(v);
+      float yf = y + randomVal(v);
+      color = color + trace(position,
+                            !((goal + rand_left) +
+                              left * ((xf - imageWidth / 2.0f) + randomVal(v)) +
+                              up * ((yf - imageHeight / 2.0f) + randomVal(v))),
+                            v);
+    }
+    // Reinhard tone mapping
+    color = color * (1.0f / sampleCount) + 14.0f / 241.0f;
+
+    // Save the pre-quantized image.
+    rawImg[i] = color;
+
+    Vec o = color + 1.0f;
+    color = Vec(color.x / o.x, color.y / o.y, color.z / o.z) * 255.0f;
+    img[i].r = (unsigned char)color.x;
+    img[i].g = (unsigned char)color.y;
+    img[i].b = (unsigned char)color.z;
+  }
   total.stop();
 
   bool hasErrors = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,

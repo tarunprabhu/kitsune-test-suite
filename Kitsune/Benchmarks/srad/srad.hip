@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
   iters.stop();
   total.stop();
 
-  int mismatch = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows, cols,
-                        outFile, cpuRefFile, gpuRefFile);
-  return mismatch;
+  bool hasErrors = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows,
+                          cols, outFile, cpuRefFile, gpuRefFile);
+  return hasErrors;
 }

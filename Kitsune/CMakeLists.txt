@@ -58,6 +58,18 @@ etc.) being built and run. This will only run a subset of the tests that are \
 intended as benchmarks. NOTE: This may skip some correctness checks"
   OFF)
 
+option(KITSUNE_BUILD_VANILLA_C
+  "Build any vanilla C files in the test suite"
+  OFF)
+
+option(KITSUNE_BUILD_VANILLA_CXX
+  "Build any vanilla C++ files in the test suite"
+  OFF)
+
+option(KITSUNE_BUILD_VANILLA_Fortran
+  "Build any vanilla Fortran files in the test suite"
+  OFF)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 # Build and run the vanilla cuda (.cu) tests
