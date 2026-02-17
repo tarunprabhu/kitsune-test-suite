@@ -5,25 +5,23 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <kitsune.h>
 
 #include "fpcmp.h"
 #include "timing.h"
 
 #include "euler3d.inc"
 
-static void cpy(kitsune::mobile_ptr<float> dst,
-                const kitsune::mobile_ptr<float> src, int n) {
+static void cpy(float *dst, const float *src, int n) {
   // clang-format off
-  forall(int i = 0; i < n; i++) {
+  for (int i = 0; i < n; i++) {
     dst[i] = src[i];
   }
   // clang-format on
 }
 
-static void initialize_variables(int nelr, kitsune::mobile_ptr<float> variables,
-                                 kitsune::mobile_ptr<float> ff_variable) {
-  forall(int i = 0; i < nelr; i++) {
+static void initialize_variables(int nelr, float *variables,
+                                 float *ff_variable) {
+  for (int i = 0; i < nelr; i++) {
     for (int j = 0; j < NVAR; j++)
       variables[i + j * nelr] = ff_variable[j];
   }
@@ -73,11 +71,9 @@ static float compute_speed_of_sound(float density, float pressure) {
   return sqrtf(float(GAMMA) * pressure / density);
 }
 
-static void compute_step_factor(int nelr,
-                                const kitsune::mobile_ptr<float> variables,
-                                const kitsune::mobile_ptr<float> areas,
-                                kitsune::mobile_ptr<float> step_factors) {
-  forall(int blk = 0; blk < nelr / block_length; ++blk) {
+static void compute_step_factor(int nelr, const float *variables,
+                                const float *areas, float *step_factors) {
+  for (int blk = 0; blk < nelr / block_length; ++blk) {
     int b_start = blk * block_length;
     int b_end =
         (blk + 1) * block_length > nelr ? nelr : (blk + 1) * block_length;
@@ -106,19 +102,16 @@ static void compute_step_factor(int nelr,
   }
 }
 
-static void compute_flux(int nelr,
-                         kitsune::mobile_ptr<int> elements_surrounding_elements,
-                         kitsune::mobile_ptr<float> normals,
-                         kitsune::mobile_ptr<float> variables,
-                         kitsune::mobile_ptr<float> fluxes,
-                         const kitsune::mobile_ptr<float> ff_variable,
+static void compute_flux(int nelr, int *elements_surrounding_elements,
+                         float *normals, float *variables, float *fluxes,
+                         const float *ff_variable,
                          const Float3 ff_flux_contribution_momentum_x,
                          const Float3 ff_flux_contribution_momentum_y,
                          const Float3 ff_flux_contribution_momentum_z,
                          const Float3 ff_flux_contribution_density_energy) {
   const float smoothing_coefficient = 0.2f;
 
-  forall(unsigned blk = 0; blk < nelr / block_length; ++blk) {
+  for (unsigned blk = 0; blk < nelr / block_length; ++blk) {
     unsigned int b_start = blk * block_length;
     unsigned int b_end =
         (blk + 1) * block_length > nelr ? nelr : (blk + 1) * block_length;
@@ -293,11 +286,9 @@ static void compute_flux(int nelr,
   }
 }
 
-static void time_step(int j, int nelr, kitsune::mobile_ptr<float> old_variables,
-                      kitsune::mobile_ptr<float> variables,
-                      kitsune::mobile_ptr<float> step_factors,
-                      kitsune::mobile_ptr<float> fluxes) {
-  forall(int blk = 0; blk < nelr / block_length; ++blk) {
+static void time_step(int j, int nelr, float *old_variables, float *variables,
+                      float *step_factors, float *fluxes) {
+  for (int blk = 0; blk < nelr / block_length; ++blk) {
     int b_start = blk * block_length;
     int b_end =
         (blk + 1) * block_length > nelr ? nelr : (blk + 1) * block_length;
@@ -323,14 +314,14 @@ static void time_step(int j, int nelr, kitsune::mobile_ptr<float> old_variables,
 }
 
 int main(int argc, char *argv[]) {
-  kitsune::mobile_ptr<float> ff_variable;
-  kitsune::mobile_ptr<float> areas;
-  kitsune::mobile_ptr<int> elements_surrounding_elements;
-  kitsune::mobile_ptr<float> normals;
-  kitsune::mobile_ptr<float> variables;
-  kitsune::mobile_ptr<float> old_variables;
-  kitsune::mobile_ptr<float> fluxes;
-  kitsune::mobile_ptr<float> step_factors;
+  float *ff_variable;
+  float *areas;
+  int *elements_surrounding_elements;
+  float *normals;
+  float *variables;
+  float *old_variables;
+  float *fluxes;
+  float *step_factors;
   int iterations;
   int nel, nelr;
   std::string domainFile;
@@ -352,7 +343,7 @@ int main(int argc, char *argv[]) {
   Timer &sf = tg.add("step_factor", "Step factor");
   Timer &rk = tg.add("rk", "Runge-Kutta");
 
-  header("forall", domainFile, iterations);
+  header("for", domainFile, iterations);
 
   // read in domain geometry and create arrays
   read_domain(ff_variable, areas, elements_surrounding_elements, normals,

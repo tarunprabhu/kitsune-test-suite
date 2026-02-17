@@ -223,7 +223,7 @@ int main(int argc, char **argv) {
   }
   total.stop();
 
-  int mismatch = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,
-                        outFile, cpuRefFile, gpuRefFile);
-  return mismatch;
+  bool hasErrors = footer(tg, img, rawImg, imageWidth, imageHeight, imgFile,
+                          outFile, cpuRefFile, gpuRefFile);
+  return hasErrors;
 }

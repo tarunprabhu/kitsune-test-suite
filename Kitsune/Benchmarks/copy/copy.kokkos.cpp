@@ -29,7 +29,7 @@ template <> size_t check(const DualView &vwd, const DualView &vws, size_t n) {
 }
 
 int main(int argc, char *argv[]) {
-  size_t errors = 0;
+  bool hasErrors = false;
   Kokkos::initialize(argc, argv);
   {
     size_t n;
@@ -67,9 +67,9 @@ int main(int argc, char *argv[]) {
     dst.sync_host();
     src.sync_host();
 
-    errors = footer(tg, dst, src, n);
+    hasErrors = footer(tg, dst, src, n);
   }
   Kokkos::finalize();
 
-  return errors;
+  return hasErrors;
 }

@@ -140,7 +140,7 @@ static void alloc(FArr &ff_variable, FArr &areas,
   (void)hipMallocManaged(&old_variables, nelr * NVAR * sizeof(float));
   (void)hipMallocManaged(&fluxes, nelr * NVAR * sizeof(float));
   (void)hipMallocManaged(&step_factors, nelr * sizeof(float));
-#else
+#elif defined(__kitsune_tt__)
   areas.alloc(nelr);
   elements_surrounding_elements.alloc(nelr * NNB);
   normals.alloc(NDIM * NNB * nelr);
@@ -148,6 +148,14 @@ static void alloc(FArr &ff_variable, FArr &areas,
   old_variables.alloc(nelr * NVAR);
   fluxes.alloc(nelr * NVAR);
   step_factors.alloc(nelr);
+#else
+  areas = (FArr)malloc(nelr * sizeof(float));
+  elements_surrounding_elements = (IArr)malloc(nelr * NNB * sizeof(int));
+  normals = (FArr)malloc(nelr * NDIM * NNB * sizeof(float));
+  variables = (FArr)malloc(nelr * NVAR * sizeof(float));
+  old_variables = (FArr)malloc(nelr * NVAR * sizeof(float));
+  fluxes = (FArr)malloc(nelr * NVAR * sizeof(float));
+  step_factors = (FArr)malloc(nelr * sizeof(float));
 #endif
 }
 
@@ -175,7 +183,7 @@ static void dealloc(FArr &ff_variable, FArr &areas,
   (void)hipFree(old_variables);
   (void)hipFree(fluxes);
   (void)hipFree(step_factors);
-#else
+#elif defined(__kitsune_tt__)
   ff_variable.free();
   areas.free();
   elements_surrounding_elements.free();
@@ -184,6 +192,15 @@ static void dealloc(FArr &ff_variable, FArr &areas,
   old_variables.free();
   fluxes.free();
   step_factors.free();
+#else
+  free(ff_variable);
+  free(areas);
+  free(elements_surrounding_elements);
+  free(normals);
+  free(variables);
+  free(old_variables);
+  free(fluxes);
+  free(step_factors);
 #endif
 }
 
@@ -213,8 +230,10 @@ read_domain(FArr &ff_variable, FArr &areas, IArr &elements_surrounding_elements,
   cudaMallocManaged(&ff_variable, NVAR * sizeof(float));
 #elif defined(__HIP__)
   (void)hipMallocManaged(&ff_variable, NVAR * sizeof(float));
-#else
+#elif defined(__kitsune_tt__)
   ff_variable.alloc(NVAR);
+#else
+  ff_variable = (FArr)malloc(NVAR * sizeof(float));
 #endif
 
   // set far field conditions
@@ -357,7 +376,7 @@ cleanup:
   fclose(fe);
   fclose(fa);
 
-  return true;
+  return matches;
 }
 
 template <typename FArr>
@@ -392,11 +411,11 @@ static bool footer(const TimerGroup &tg, FArr &ff_variable, FArr &areas,
   std::string checkFile = cpuRefFile;
 #if defined(__CUDACC__) || defined(__HIP__) || defined(__KOKKOS__)
   checkFile = gpuRefFile;
-#else
+#elif defined(__kitsune_tt__)
   std::string tt = __kitsune_tt__;
   if (tt == "cuda" or tt == "hip")
     checkFile = gpuRefFile;
-#endif // !__CUDACC__ && !__HIP__
+#endif
 
   bool ok = true;
   if (!checkFile.size()) {

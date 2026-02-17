@@ -10,7 +10,7 @@
 #include "srad.inc"
 
 int main(int argc, char *argv[]) {
-  int mismatch = 0;
+  bool hasErrors = false;
   Kokkos::initialize(argc, argv);
   {
     kitsune::mobile_ptr<float> I, J;
@@ -157,8 +157,8 @@ int main(int argc, char *argv[]) {
     iters.stop();
     total.stop();
 
-    mismatch = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows, cols,
-                      outFile, cpuRefFile, gpuRefFile);
+    hasErrors = footer(tg, I, J, c, iN, iS, jE, jW, dN, dS, dW, dE, rows, cols,
+                       outFile, cpuRefFile, gpuRefFile);
   }
-  return mismatch;
+  return hasErrors;
 }

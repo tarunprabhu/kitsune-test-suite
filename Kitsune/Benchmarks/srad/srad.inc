@@ -179,7 +179,7 @@ static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   (void)hipFree(dS);
   (void)hipFree(dW);
   (void)hipFree(dE);
-#else
+#elif defined(__kitsune_tt__)
   I.free();
   J.free();
   c.free();
@@ -191,7 +191,19 @@ static void dealloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   dS.free();
   dW.free();
   dE.free();
-#endif // CPU
+#else
+  free(I);
+  free(J);
+  free(c);
+  free(iN);
+  free(iS);
+  free(jW);
+  free(jE);
+  free(dN);
+  free(dS);
+  free(dW);
+  free(dE);
+#endif
 }
 
 template <typename FArr, typename IArr>
@@ -224,7 +236,7 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   (void)hipMallocManaged(&dS, size_I * sizeof(float));
   (void)hipMallocManaged(&dW, size_I * sizeof(float));
   (void)hipMallocManaged(&dE, size_I * sizeof(float));
-#else
+#elif defined(__kitsune_tt__)
   I.alloc(size_I);
   J.alloc(size_I);
   c.alloc(size_I);
@@ -236,7 +248,19 @@ static void alloc(FArr &I, FArr &J, FArr &c, IArr &iN, IArr &iS, IArr &jE,
   dS.alloc(size_I);
   dW.alloc(size_I);
   dE.alloc(size_I);
-#endif // CPU
+#else
+  I = (FArr)malloc(size_I * sizeof(float));
+  J = (FArr)malloc(size_I * sizeof(float));
+  c = (FArr)malloc(size_I * sizeof(float));
+  iN = (IArr)malloc(rows * sizeof(int));
+  iS = (IArr)malloc(rows * sizeof(int));
+  jW = (IArr)malloc(cols * sizeof(int));
+  jE = (IArr)malloc(cols * sizeof(int));
+  dN = (FArr)malloc(size_I * sizeof(float));
+  dS = (FArr)malloc(size_I * sizeof(float));
+  dW = (FArr)malloc(size_I * sizeof(float));
+  dE = (FArr)malloc(size_I * sizeof(float));
+#endif
 }
 
 template <typename FArr, typename IArr>
@@ -305,9 +329,9 @@ cleanup:
   return errors;
 }
 
-static int check(const std::string &outFile, const std::string &checkFile,
-                 int rows, int cols) {
-  int mismatch = 0;
+static size_t check(const std::string &outFile, const std::string &checkFile,
+                    int rows, int cols) {
+  size_t mismatch = 0;
   if (not checkFile.size()) {
     std::cout << "--------------------------------------------------\n";
     std::cout << " WARNING: Not checking output (no reference file) \n";
@@ -326,11 +350,11 @@ static int check(const std::string &outFile, const std::string &checkFile,
 }
 
 template <typename FArr, typename IArr>
-static size_t footer(TimerGroup &tg, FArr &I, FArr &J, FArr &c, IArr &iN,
-                     IArr &iS, IArr &jE, IArr &jW, FArr &dN, FArr &dS, FArr &dW,
-                     FArr &dE, int rows, int cols, const std::string &outFile,
-                     const std::string &cpuRefFile,
-                     const std::string &gpuRefFile) {
+static bool footer(TimerGroup &tg, FArr &I, FArr &J, FArr &c, IArr &iN,
+                   IArr &iS, IArr &jE, IArr &jW, FArr &dN, FArr &dS, FArr &dW,
+                   FArr &dE, int rows, int cols, const std::string &outFile,
+                   const std::string &cpuRefFile,
+                   const std::string &gpuRefFile) {
   std::cout << "done\n\n";
   tg.prettyTimes(std::cout, 4);
   std::cout << "----\n\n";
@@ -349,11 +373,11 @@ static size_t footer(TimerGroup &tg, FArr &I, FArr &J, FArr &c, IArr &iN,
   std::string checkFile = cpuRefFile;
 #if defined(__CUDACC__) || defined(__HIP__) || defined(__KOKKOS__)
   checkFile = gpuRefFile;
-#else
+#elif defined(__kitsune_tt__)
   std::string tt = __kitsune_tt__;
   if (tt == "cuda" or tt == "hip")
     checkFile = gpuRefFile;
-#endif // !__CUDACC__ && !__HIP__
+#endif
 
   size_t errors = check(outFile, checkFile, rows, cols);
   dealloc(I, J, c, iN, iS, jE, jW, dN, dS, dW, dE);

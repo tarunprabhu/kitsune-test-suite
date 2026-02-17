@@ -1,34 +1,36 @@
-// Straightforward memory copy
+// Simple saxpy benchmark
 
 #include <iostream>
-#include <kitsune.h>
 
+#include "fpcmp.h"
 #include "timing.h"
 
-#include "copy.inc"
+#include "saxpy.inc"
 
 int main(int argc, char *argv[]) {
   size_t n;
   unsigned iterations;
-  kitsune::mobile_ptr<ElementType> dst;
-  kitsune::mobile_ptr<ElementType> src;
+  ElementType* x;
+  ElementType* y;
+  ElementType* r;
 
-  TimerGroup tg("copy");
+  TimerGroup tg("saxpy");
   Timer &total = tg.add("total", "Total");
 
   parseCommandLineInto(argc, argv, n, iterations);
-  header("forall", dst, src, n);
+  header("for", x, y, r, n);
 
   for (unsigned t = 0; t < iterations; t++) {
     total.start();
     // clang-format off
-    forall(size_t i = 0; i < n; i++) {
-      dst[i] = src[i];
+    for (size_t i = 0; i < n; i++) {
+      r[i] = A * x[i] + y[i];
     }
+    // clang-format on
     uint64_t us = total.stop();
     std::cout << "\t" << t << ". iteration time: " << Timer::secs(us) << "\n";
   }
 
-  bool hasErrors = footer(tg, dst, src, n);
+  bool hasErrors = footer(tg, x, y, r, n);
   return hasErrors;
 }

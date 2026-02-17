@@ -35,7 +35,7 @@ size_t check(const DualView &vwa, const DualView &vwb, const DualView &vwc,
 }
 
 int main(int argc, char *argv[]) {
-  size_t errors = 0;
+  bool hasErrors = false;
   Kokkos::initialize(argc, argv);
   {
     size_t n;
@@ -78,9 +78,9 @@ int main(int argc, char *argv[]) {
     b.sync_host();
     a.sync_host();
 
-    errors = footer(tg, a, b, c, n);
+    hasErrors = footer(tg, a, b, c, n);
   }
   Kokkos::finalize();
 
-  return errors;
+  return hasErrors;
 }
