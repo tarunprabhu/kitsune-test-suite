@@ -89,6 +89,25 @@ set(TEST_VANILLA_KOKKOS_hip OFF)
 # Build and run the Fortran tests with a vanilla (non-Kitsune) compiler
 set(TEST_VANILLA_Fortran OFF)
 
+# We cannot run tests in parallel for several reasons:
+#
+#   - The CPU-centric tapir targets such as opencilk and qthreads will use all
+#     cores available on the system by default. If multiple tests are run at a
+#     time, each will try to use all available cores.
+#
+#   - Multiple tests should not attempt to use the GPU at the same time either.
+#     Since each test may attempt to use all of GPU memory, running multiple
+#     tests at once may result in failures because of insufficient GPU memory.
+#
+# Just append -j 1 to the lit flags. If a different value for -j was provided
+# at configuration time, it will be overridden here.
+string(APPEND TEST_SUITE_LIT_FLAGS ";-j1")
+
+# The change to TEST_SUITE_LIT_FLAGS must be visible in the parent directory
+# because the `check` target, which uses `TEST_SUITE_LIT_FLAGS`, is created
+# there.
+set(TEST_SUITE_LIT_FLAGS "${TEST_SUITE_LIT_FLAGS}" PARENT_SCOPE)
+
 # The frontends to test
 set(TEST_C OFF)
 set(TEST_CXX OFF)
@@ -566,8 +585,4 @@ endif ()
 add_subdirectory(utils)
 
 file(COPY lit.local.cfg DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-
-# Use configure_file instead of file(COPY) because that will ensure that the
-# file will be copied when it is changed. Unlike lit.local.cfg, this will change
-# during development.
-configure_file(run-tests ${CMAKE_CURRENT_BINARY_DIR}/run-tests COPYONLY)
+configure_file(run-tests.sh.in ${CMAKE_CURRENT_BINARY_DIR}/run-tests @ONLY)

@@ -1,47 +1,16 @@
 #!/usr/bin/env sh
 #
-# The main reason this exists is to pass -j 1 to lit in order to run the tests.
-# By default, lit runs tests in parallel, but we cannot do that. Some CPU tapir
-# targets like opencilk will use all the cores on the system by default. Running
-# tests in parallel under such conditions is usually undesirable. Similarly,
-# running the tests with GPU tapir targets in parallel will cause contention on
-# the GPU which is not ideal either. It may be ok on a multi-gpu system, but for
-# now, we don't check for that. The user can always use lit directly in those
-# cases.
+# This runs the tests, then generates a report containing the following:
 #
-# There might be some way of passing options to lit via a config file, but I
-# haven't found it if it exists. This script cannot be used on Windows, but we
-# don't support Windows in Kitsune anyway.
+#   - The date and time when the tests were run
+#   - Information about the CPU and the GPU(s) on which the tests were run
+#   - Compile-and-execution time statistics
 #
-# This script has since expanded to also record the hardware details on the
-# system where this was run and collating interesting compile and execution
-# time statistics. Some of these are reports from the tests themselves.
+# This is most useful when the test suite is configured in benchmarking mode,
+# but it may also be used when just running the correctness tests.
 
-usage="run-tests [OPTIONS]
-Try run-tests -h for more information"
-
-help="
-Run the Kitsune tests. This passes the correct options to lit, records details
-about the platform on which the tests are run (number and type of GPU's, CPU
-core count etc.) and combines useful compile and execution time statistics into
-a single, more concise, report.
-
-USAGE
-
-    run-tests [OPTIONS]
-
-OPTIONS
-
-    -h          Show help and exit
-
-    -o <file>   Where to write the combined report. If this is not given, it
-                will be written to report.json in the Kistune/ subdirectory of
-                the test suite
-
-    -b <dir>    The Kitsune build directory. This is useful if we strictly
-                need the llvm-lit executable that is present there. Otherwise,
-                the lit executable from $PATH will be used
-"
+lit="@TEST_SUITE_LIT@"
+lit_flags="@TEST_SUITE_LIT_FLAGS@"
 
 trim() {
     expr='s/^[[:space:]]*//;s/[[:space:]]*$//'
@@ -52,6 +21,29 @@ trim() {
     fi
 }
 
+exe=$(basename $0)
+
+usage="${exe} [OPTIONS]
+${exe} -h for more information"
+
+help="
+Run the Kitsune tests, then combines details about the platform on which the
+tests are run (number and type of GPU's, CPU core count etc.), together with
+compile-time, and execution time statistics into a single, more concise, report
+
+USAGE
+
+    ${exe} [OPTIONS]
+
+OPTIONS
+
+    -h          Show help and exit
+
+    -o <file>   Where to write the combined report. If this is not given, the
+                report will be written to report.json in Kitsune/ within the
+                kitsune-test-suite build directory
+"
+
 # This will be the Kitsune/ subdirectory within the root of the llvm-test-suite
 # build directory
 kitsune=$(dirname $0)
@@ -59,14 +51,11 @@ kitsune=$(dirname $0)
 # The root of the llvm-test-suite build directory.
 test_suite=$(dirname "${kitsune}")
 
-build_dir=""
+# The default location of the combined report.
 outfile="${kitsune}/report.json"
 
-while getopts "b:ho:" opt; do
+while getopts "ho:" opt; do
     case "${opt}" in
-    b)
-        build_dir="${OPTARG}"
-        ;;
     h)
         echo "${help}"
         exit 0
@@ -75,28 +64,40 @@ while getopts "b:ho:" opt; do
         outfile="${OPTARG}"
         ;;
     *)
+        echo ""
         echo "${usage}"
         exit 1
         ;;
     esac
 done
+shift $((OPTIND - 1))
 
-lit=
-if [ -n "${build_dir}" ]; then
-    lit=${build_dir}/bin/llvm-lit
-else
-    lit=$(command -v lit)
-fi
-
-if [ -z "${lit}" ] || ! [ -x "${lit}" ]; then
-    echo "Could not find suitable lit executable"
+if [ $# -gt 0 ]; then
+    echo "Unexpected argument: '$1'"
+    echo ""
+    echo "${usage}"
     exit 1
 fi
+
+if [ -z "${lit}" ]; then
+    echo "ERROR: 'lit' executable not found"
+    echo
+    echo "Reconfigure kitsune-test-suite with -DTEST_SUITE_LIT=<path/to/lit>"
+    exit 1
+elif [ ! -x "${lit}" ]; then
+    echo "ERROR: ${lit} is not executable"
+    exit 1
+fi
+
+# lit_flags will have been set in CMake. It may use a semicolon as a separator.
+# We don't expect any other uses of semicolons, so just replace them with
+# spaces.
+lit_flags=$(echo "${lit_flags}" | tr ';' ' ')
 
 # TODO: It is not clear that we need NO_STOP_MESSAGE=1 for the Fortran tests,
 # but keep it for now. We will definitely want to revisit this at some point.
 export NO_STOP_MESSAGE=1
-${lit} -s -j 1 -o ${kitsune}/ts-report.json ${kitsune}
+${lit} ${lit_flags} -o ${kitsune}/ts-report.json ${kitsune}
 
 # This should return a non-zero exit code if any tests failed.
 pass=$?
