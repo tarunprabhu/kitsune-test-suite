@@ -1,7 +1,7 @@
 include(KitsuneTestSuite)
 
 kitsune_multisource(vecadd-multifile targets EXECUTABLE
-  CMDARGS 1024)
+  CMDARGS 2048)
 
 foreach (target IN LISTS targets)
   target_sources(${target} PUBLIC

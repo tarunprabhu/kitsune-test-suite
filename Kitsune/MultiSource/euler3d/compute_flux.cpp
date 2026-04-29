@@ -1,27 +1,27 @@
 #include <kitsune.h>
 #include <math.h>
 
+#include "../../SingleSource/euler3d/euler3d.h"
 #include "utils.h"
-#include "../../Benchmarks/euler3d/common.h"
 
 void compute_flux(int nelr,
-                  const kitsune::mobile_ptr<int> elements_surrounding_elements,
-                  const kitsune::mobile_ptr<float> normals,
-                  const kitsune::mobile_ptr<float> variables,
-                  kitsune::mobile_ptr<float> fluxes,
-                  const kitsune::mobile_ptr<float> ff_variable,
+                  const int *[[kitsune::mobile]] elements_surrounding_elements,
+                  const float *[[kitsune::mobile]] normals,
+                  const float *[[kitsune::mobile]] variables,
+                  float *[[kitsune::mobile]] fluxes,
+                  const float *[[kitsune::mobile]] ff_variable,
                   const Float3 ff_flux_contribution_momentum_x,
                   const Float3 ff_flux_contribution_momentum_y,
                   const Float3 ff_flux_contribution_momentum_z,
                   const Float3 ff_flux_contribution_density_energy) {
   const float smoothing_coefficient = 0.2f;
 
-  forall(int blk = 0; blk < nelr / block_length; ++blk) {
+  forall (int blk = 0; blk < nelr / block_length; ++blk) {
     int b_start = blk * block_length;
     int b_end =
         (blk + 1) * block_length > nelr ? nelr : (blk + 1) * block_length;
 
-    for (int i = b_start; i < b_end; ++i) {
+    forall (int i = b_start; i < b_end; ++i) {
       float density_i = variables[i + VAR_DENSITY * nelr];
       Float3 momentum_i;
       momentum_i.x = variables[i + (VAR_MOMENTUM + 0) * nelr];

@@ -1,9 +1,9 @@
 #include <cmath>
 #include <kitsune.h>
 
-#include "../../Benchmarks/euler3d/common.h"
+#include "../../SingleSource/euler3d/euler3d.h"
 
-void cpy(kitsune::mobile_ptr<float> dst, kitsune::mobile_ptr<float> src,
+void cpy(float *[[kitsune::mobile]] dst, const float *[[kitsune::mobile]] src,
          int n) {
   // clang-format off
   forall(unsigned int i = 0; i < n; i++) {

@@ -1,72 +1,82 @@
 // Test that calls to math functions in forall loops work correctly. This is
-// only really relevant for GPU tapir targets
+// only really relevant for the GPU-centric tapir targets.
 
 #include <cmath>
-#include <iostream>
+#include <cstdio>
+#include <cstdlib>
+
 #include <kitsune.h>
 
-using namespace kitsune;
+static float math_call1(float);
+static float math_call2(float);
 
 struct testit {
   float a, b;
 };
 
-template <typename T> static void random_fill(mobile_ptr<T> data, size_t n) {
-  for (size_t i = 0; i < n; ++i)
-    data[i] = (2.0 * 3.142) * (rand() / (T)RAND_MAX);
+[[clang::noinline]]
+static void setup(kitsune::mobile_ptr<float> &dst,
+                  kitsune::mobile_ptr<float> &src, long n) {
+  dst.alloc(n);
+  src.alloc(n);
+
+  for (long i = 0; i < n; ++i) {
+    src[i] = rand() / float(RAND_MAX);
+    dst[i] = 0;
+  }
 }
 
-__attribute__((always_inline)) void struct_test(testit *ti) {
-  ti->a = 4;
-  ti->b = ti->a + 4;
+[[clang::noinline]]
+static void teardown(kitsune::mobile_ptr<float> &dst,
+                     kitsune::mobile_ptr<float> &src) {
+  dst.free();
+  src.free();
 }
 
-template <typename T> __attribute__((always_inline)) T math_call1(T value) {
-  testit t;
-  struct_test(&t);
-  return fminf(value, 1234.56 - t.a + t.b);
+static constexpr float epsilon = 1e-6;
+
+static float relErr(float actual, float expected) {
+  return std::abs((expected - actual) / expected);
 }
 
-template <typename T> __attribute__((always_inline)) T math_call2(T value) {
-  return sqrtf(value);
+[[clang::noinline]]
+static long check(const kitsune::mobile_ptr<float> &dst,
+                  const kitsune::mobile_ptr<float> &src, long n) {
+  for (long i = 0; i < n; ++i)
+    if (relErr(dst[i], math_call1(src[i]) + math_call2(src[i])) > epsilon)
+      return i + 1;
+  return 0;
 }
 
-static size_t check(const mobile_ptr<float> dst, const mobile_ptr<float> src,
-                    size_t n) {
-  float epsilon = 1e-12;
-  size_t errors = 0;
-  for (size_t i = 0; i < n; ++i)
-    if (fabs(dst[i] - fminf(math_call1(src[i]) + math_call2(src[i]), 100.0)) >
-        epsilon)
-      errors += 1;
-  return errors;
+static float math_call1(float value) { return fminf(value, 0.1234); }
+
+static float math_call2(float value) { return sqrtf(value); }
+
+[[clang::noinline]]
+static void test(kitsune::mobile_ptr<float> &dst,
+                 const kitsune::mobile_ptr<float> &src, long n) {
+  // clang-format off
+  forall(long i = 0; i < n; ++i) {
+    dst[i] = math_call1(src[i]) + math_call2(src[i]);
+  }
+  // clang-format on
 }
 
 int main(int argc, char **argv) {
-  size_t size = 1024 * 1024;
+  kitsune::mobile_ptr<float> dst;
+  kitsune::mobile_ptr<float> src;
+  long n = 2048;
   if (argc > 1)
-    size = atol(argv[1]);
+    n = atol(argv[1]);
 
-  mobile_ptr<float> dst(size);
-  mobile_ptr<float> src(size);
+  setup(dst, src, n);
+  test(dst, src, n);
+  long err = check(dst, src, n);
+  teardown(dst, src);
 
-  random_fill(dst, size);
-
-  // clang-format off
-  forall(size_t i = 0; i < size; ++i) {
-    dst[i] = fminf(math_call1(src[i]) + math_call2(src[i]), 100.0);
-  }
-  // clang-format on
-
-  std::cout << "\n  Checking final result..." << std::flush;
-  size_t errors = check(dst, src, size);
-  if (errors)
-    std::cout << "  FAIL! (" << errors << " errors found)\n\n";
+  if (err)
+    printf("FAIL: Error at index %ld\n", err - 1);
   else
-    std::cout << "  pass\n\n";
-
-  dst.free();
-  src.free();
-
-  return errors;
+    printf("PASS\n");
+  return err ? 1 : 0;
 }

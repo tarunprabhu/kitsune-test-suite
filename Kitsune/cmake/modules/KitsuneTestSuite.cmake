@@ -74,15 +74,25 @@ endfunction ()
 
 # Register the target as a test.
 #
-#     target         The cmake target
-#     tapir_target   The tapir target. A value of "none" is a special case. It
-#                    will be treated as "not to be built with any tapir target"
-#     cmdargs        A list of command line arguments to be passed when running
-#                    the test
+#     target     The cmake target
+#     tt         The tapir target. A value of "none" is a special case. It will
+#                be treated as "not to be built with any tapir target"
+#     cmdargs    A list of command line arguments to be passed when running the
+#                test
 #
-function (register_test target tapir_target cmdargs)
+function (register_test target tt cmdargs)
   llvm_test_executable_no_test(${target} ${source})
-  llvm_test_run(WORKDIR "%S" "${cmdargs}")
+  if (tt STREQUAL "pthreads")
+    # FIXME: This only works on shells that allow environment variables to be
+    # set on the same line as the executable. But this is a temporary workaround
+    # anyway. It is only here because nested tapir loops are painfully slow with
+    # the pthreads tapir target.
+    llvm_test_run(WORKDIR "%S"
+        EXECUTABLE "KIT_NUM_THREADS=2 %S/${target}"
+        "${cmdargs}")
+  else ()
+    llvm_test_run(WORKDIR "%S" "${cmdargs}")
+  endif ()
 
   # timeit adds --append-exitstatus to the test output. We expect that the tests
   # will perform their own verification and return 0 on success, non-zero on
@@ -98,8 +108,8 @@ function (register_test target tapir_target cmdargs)
   target_include_directories(${target} PUBLIC
     ${CMAKE_SOURCE_DIR}/Kitsune/include)
 
-  if (NOT tapir_target STREQUAL "none")
-    set(tapir_flags "--tapir=${tapir_target}")
+  if (NOT tt STREQUAL "none")
+    set(tapir_flags "--tapir=${tt}")
 
     # We need to set the tapir flags on the link options, otherwise the runtime
     # libraries (kitrt, opencilk etc.) will not be linked in correctly.
@@ -128,16 +138,16 @@ endfunction()
 
 # Setup a single-source test for the given tapir target.
 #
-#     source         The absolute path to the source file
-#     lang           The source language
-#     tapir_target   The tapir target. A value of "none" is a special case. It
-#                    will be treated as "not to be built with any tapir target"
-#     cmdargs        A list of command line arguments to be passed when running
-#                    the test
+#     source     The absolute path to the source file
+#     lang       The source language
+#     tt         The tapir target. A value of "none" is a special case. It will
+#                be treated as "not to be built with any tapir target"
+#     cmdargs    A list of command line arguments to be passed when running the
+#                test
 #
-function (kit_singlesource_test source lang tapir_target cmdargs)
+function (kit_singlesource_test source lang tt cmdargs)
   get_filename_component(base "${source}" NAME_WE)
-  if (tapir_target STREQUAL "none")
+  if (tt STREQUAL "none")
     if (lang STREQUAL "cuda")
       set(target ${base}-nvcc)
     elseif (lang STREQUAL "hip")
@@ -155,18 +165,18 @@ function (kit_singlesource_test source lang tapir_target cmdargs)
       message(FATAL_ERROR "Unsupported language '${lang}' for '${source}'")
     endif ()
   elseif (lang STREQUAL "kitkokkos")
-    set(target "${base}-kokkos-${tapir_target}")
+    set(target "${base}-kokkos-${tt}")
   elseif (lang STREQUAL "kitc")
-    set(target "${base}-c-${tapir_target}")
+    set(target "${base}-c-${tt}")
   elseif (lang STREQUAL "kitcxx")
-    set(target "${base}-cxx-${tapir_target}")
+    set(target "${base}-cxx-${tt}")
   elseif (lang STREQUAL "kitfort")
-    set(target "${base}-fortran-${tapir_target}")
+    set(target "${base}-fortran-${tt}")
   else ()
     message(FATAL_ERROR "Language '${lang}' not handled for '${source}'")
   endif ()
 
-  register_test("${target}" "${tapir_target}" "${cmdargs}")
+  register_test("${target}" "${tt}" "${cmdargs}")
 
   # If this is a target that is compiled with --tapir=, set the additional
   # flags that were provided at configure time.
@@ -182,7 +192,7 @@ function (kit_singlesource_test source lang tapir_target cmdargs)
   # compile the vanilla cuda code for the current GPU. If this is not done, it
   # will try to JIT the code which we don't want because it becomes a less fair
   # comparison.
-  if (tapir_target STREQUAL "none")
+  if (tt STREQUAL "none")
     if (lang STREQUAL "cuda" OR
         lang STREQUAL "kokkos-nvidia")
       set_target_properties(${target} PROPERTIES CUDA_ARCHITECTURES "native")
@@ -351,31 +361,31 @@ endfunction()
 #
 # ARGUMENTS
 #
-#     base          The base name of the target
-#     type          Must be one of "EXECUTABLE", "SHARED", or "STATIC"
-#     tapir_target  The tapir target. This must be a target that is a valid
-#                   argument of the --tapir flag
-#     kokkos        If ON, kokkos mode should be enabled on the target
-#     cmdargs       A list of command line arguments to be passed when running
-#                   the test
-#     data          A list of files containing that will be used by the test.
-#                   These will be copied into the build directory.
+#     base       The base name of the target
+#     type       Must be one of "EXECUTABLE", "SHARED", or "STATIC"
+#     tt         The tapir target. This must be a target that is a valid
+#                argument of the --tapir flag
+#     kokkos     If ON, kokkos mode should be enabled on the target
+#     cmdargs    A list of command line arguments to be passed when running the
+#                test
+#     data       A list of files containing that will be used by the test. These
+#                will be copied into the build directory
 #
 # RETURN
 #
-#     out           The list to which to append the target that was created
+#     out        The list to which to append the target that was created
 #
-macro(make_target base type tapir_target kokkos out)
+macro(make_target base type tt kokkos out)
   set(target)
   if (kokkos)
-    set(target "${base}-kokkos-${tapir_target}")
+    set(target "${base}-kokkos-${tt}")
   else ()
-    set(target "${base}-unknown-${tapir_target}")
+    set(target "${base}-unknown-${tt}")
   endif ()
 
   if (type STREQUAL "EXECUTABLE")
     # The executable target will be created by register_test().
-    register_test("${target}" "${tapir_target}" "${cmdargs}" "${data}")
+    register_test("${target}" "${tt}" "${cmdargs}" "${data}")
   elseif (type STREQUAL "SHARED")
     add_library(${target} SHARED)
   elseif (type STREQUAL "STATIC")
@@ -385,7 +395,7 @@ macro(make_target base type tapir_target kokkos out)
   target_include_directories(${target} PUBLIC
     ${CMAKE_SOURCE_DIR}/Kitsune/include)
 
-  set(tapir_flags "--tapir=${tapir_target}")
+  set(tapir_flags "--tapir=${tt}")
 
   target_compile_options(${target} BEFORE PUBLIC -flto ${tapir_flags})
   target_link_options(${target} PUBLIC

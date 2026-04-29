@@ -1,16 +1,16 @@
 #include <kitsune.h>
 
-#include "../../Benchmarks/euler3d/common.h"
+#include "../../SingleSource/euler3d/euler3d.h"
 
-void time_step(int j, int nelr, kitsune::mobile_ptr<float> old_variables,
-               kitsune::mobile_ptr<float> variables,
-               kitsune::mobile_ptr<float> step_factors,
-               kitsune::mobile_ptr<float> fluxes) {
-  forall(int blk = 0; blk < nelr / block_length; ++blk) {
+void time_step(int j, int nelr, float *[[kitsune::mobile]] old_variables,
+               float *[[kitsune::mobile]] variables,
+               float *[[kitsune::mobile]] step_factors,
+               float *[[kitsune::mobile]] fluxes) {
+  forall (int blk = 0; blk < nelr / block_length; ++blk) {
     int b_start = blk * block_length;
     int b_end =
         (blk + 1) * block_length > nelr ? nelr : (blk + 1) * block_length;
-    for (int i = b_start; i < b_end; ++i) {
+    forall (int i = b_start; i < b_end; ++i) {
       float factor = step_factors[i] / float(RK + 1 - j);
       variables[i + VAR_DENSITY * nelr] =
           old_variables[i + VAR_DENSITY * nelr] +

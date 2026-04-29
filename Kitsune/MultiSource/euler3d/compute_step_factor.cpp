@@ -1,18 +1,18 @@
 #include <cmath>
 #include <kitsune.h>
 
+#include "../../SingleSource/euler3d/euler3d.h"
 #include "utils.h"
-#include "../../Benchmarks/euler3d/common.h"
 
-void compute_step_factor(int nelr, const kitsune::mobile_ptr<float> variables,
-                         const kitsune::mobile_ptr<float> areas,
-                         kitsune::mobile_ptr<float> step_factors) {
+void compute_step_factor(int nelr, const float *[[kitsune::mobile]] variables,
+                         const float *[[kitsune::mobile]] areas,
+                         float *[[kitsune::mobile]] step_factors) {
   forall(int blk = 0; blk < nelr / block_length; ++blk) {
     int b_start = blk * block_length;
     int b_end =
         (blk + 1) * block_length > nelr ? nelr : (blk + 1) * block_length;
 
-    for (int i = b_start; i < b_end; i++) {
+    forall (int i = b_start; i < b_end; i++) {
       float density = variables[i + VAR_DENSITY * nelr];
 
       Float3 momentum;

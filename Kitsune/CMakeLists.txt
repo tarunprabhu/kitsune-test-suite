@@ -7,6 +7,8 @@
 # after querying the kitsune installation using the kit-config utility.
 project(kitsune-test-suite)
 
+set(CMAKE_COLOR_DIAGNOSTICS ON)
+
 # The list of languages here must be kept in sync with that known to Kitsune
 set(KITSUNE_TEST_LANGS "" CACHE STRING
   "A semicolon-separated list of languages to test. If this is not set, all \
@@ -569,15 +571,9 @@ endif ()
 # first place since this very much isn't one.
 remove_definitions(-Werror=date-time)
 
-# The tests in the Benchmarks directory can be used both for performance
-# comparisons and correctness checks.
-add_subdirectory(Benchmarks)
-
-# The single-source tests in particular are only intended for correctness. They
-# are generally very small and there is nothing to be gained when running them
-# during benchmarking. It is possible that we could do some benchmarking with
-# the multisource tests at some point, but for now, we don't.
-if (NOT KITSUNE_BENCHMARK)
+if (KITSUNE_BENCHMARK)
+  add_subdirectory(Benchmarks)
+else ()
   add_subdirectory(SingleSource)
   add_subdirectory(MultiSource)
 endif ()

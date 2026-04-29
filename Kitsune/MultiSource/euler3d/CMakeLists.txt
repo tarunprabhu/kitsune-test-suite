@@ -1,13 +1,11 @@
 include(KitsuneTestSuite)
 
 set(input fvcorr.domn.193K)
-set(base euler3d.ref)
-set(refc "${base}.cpu.dat")
-set(refg "${base}.gpu.dat")
+set(ref euler3d.ref.dat)
 
 kitsune_multisource(euler3d-multifile targets EXECUTABLE
-  CMDARGS -c ${refc} -g ${refg} ${input} 50
-  DATA ${input} ${refc} ${refg})
+  CMDARGS -c ${ref} ${input} 50
+  DATA ${input} ${ref})
 
 foreach (target IN LISTS targets)
   target_sources(${target} PUBLIC
