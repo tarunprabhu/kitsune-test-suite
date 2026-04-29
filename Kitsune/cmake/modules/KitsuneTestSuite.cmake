@@ -7,6 +7,41 @@
 
 include(SingleMultiSource)
 
+# Add all subdirectories of ${CMAKE_CURRENT_SOURCE_DIR}. In addition, if
+# a subdirectory <dir> is added, and it contains a lit.local.cfg file, that file
+# will be copied to ${CMAKE_CURRENT_BINARY_DIR}/<dir>.
+#
+# ARGUMENTS
+#
+#   <none>
+#
+# KEYWORD ARGUMENTS
+#
+#   EXCLUDE    A list of directory names to exclude
+#
+function (add_subdirectories)
+  cmake_parse_arguments(KIT "" "" "EXCLUDE" ${ARGN})
+
+  # If a new directory is added, cmake may need to be re-run before it is
+  # picked up. This is not ideal, but it does make the test suite easier to use.
+  file(GLOB DIRS LIST_DIRECTORIES ON CONFIGURE_DEPENDS *)
+
+  foreach (DIR IN LISTS DIRS)
+    if (IS_DIRECTORY "${DIR}")
+      get_filename_component(DIRNAME "${DIR}" NAME)
+      if (NOT "${DIRNAME}" IN_LIST KIT_EXCLUDE)
+        add_subdirectory("${DIR}")
+
+        set(LIT_LOCAL_CFG "${DIR}/lit.local.cfg")
+        if (EXISTS "${LIT_LOCAL_CFG}")
+          file(COPY "${LIT_LOCAL_CFG}"
+            DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/${DIRNAME}")
+        endif ()
+      endif ()
+    endif ()
+  endforeach ()
+endfunction ()
+
 # Look at the file name to determine the source language. This is not really a
 # source language in the strict sense of the term, but something for internal
 # use that will help determine what to do with the file. The "not widely

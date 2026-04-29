@@ -1,7 +1,5 @@
 include(KitsuneTestSuite)
 
-file(COPY lit.local.cfg DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-
 # samples    8
 # width      160
 # height     100

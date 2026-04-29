@@ -1,7 +1,5 @@
 include(KitsuneTestSuite)
 
-file(COPY lit.local.cfg DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-
 set(input fvcorr.domn.193K)
 set(ref euler3d.ref.dat)
 set(cmdargs ${input} 20)
