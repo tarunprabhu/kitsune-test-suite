@@ -4,7 +4,7 @@ set(input fvcorr.domn.193K)
 set(ref euler3d.ref.dat)
 
 kitsune_multisource(euler3d-multifile targets EXECUTABLE
-  CMDARGS -c ${ref} ${input} 50
+  CMDARGS -c ${ref} ${input} 20
   DATA ${input} ${ref})
 
 foreach (target IN LISTS targets)

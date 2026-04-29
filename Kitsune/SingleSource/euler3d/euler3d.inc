@@ -17,7 +17,7 @@ static const char *help =
   "\n"
   "    domain     File containing the domain geometry\n"
   "\n"
-  "    iters      Number of iterations [50]\n";
+  "    iters      Number of iterations [20]\n";
 // clang-format on
 
 [[clang::noinline]]
@@ -263,7 +263,7 @@ static int report(bool ok) {
 static void parseCommandLineArgs(int argc, char *argv[], int &iterations,
                                  std::string &domainFile,
                                  std::string &checkFile, std::string &outFile) {
-  iterations = 50;
+  iterations = 20;
   checkFile = "";
   outFile = getOutFile(argv);
 
