@@ -2,10 +2,15 @@ include(KitsuneTestSuite)
 
 set(input fvcorr.domn.193K)
 set(ref euler3d.ref.dat)
+set(cmdargs ${input} 20)
 
+# Don't test this with pthreads because it is even slower than serial.
+# FIXME: If the performance of the pthreads tapir target is ever improved,
+# remove the EXCLUDE argument from here.
 kitsune_multisource(euler3d-multifile targets EXECUTABLE
-  CMDARGS -c ${ref} ${input} 20
-  DATA ${input} ${ref})
+  CMDARGS -c ${ref} ${cmdargs}
+  DATA ${input} ${ref}
+  EXCLUDE pthreads)
 
 foreach (target IN LISTS targets)
   target_sources(${target} PUBLIC
