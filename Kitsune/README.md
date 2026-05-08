@@ -1,4 +1,4 @@
-# Kitsune-specific tests #
+# Kitsune-specific Tests #
 
 This directory contains end-to-end tests for Kitsune. They are intended to test
 for both correctness and (some) performance regressions. The sections on
@@ -10,6 +10,7 @@ about the test suite itself, how it is organized and the contents. The
 organization of the Kitsune tests is somewhat idiosyncratic and relies on file
 names following a strict pattern. Please read that section carefully before
 adding/modifying this test suite.
+
 
 ## Building ##
 
@@ -69,13 +70,15 @@ on will also run the Kokkos tests in vanilla mode (in addition to Kitsune's
 This is typically one with GPU support. _[[TODO: Explain the Kokkos details
 better]]_
 
-`-DKITSUNE_C_FLAGS`, `-DKITSUNE_CXX_FLAGS`, and `-DKITSUNE_Fortran_FLAGS` can be
-used to pass options to Kitsune's C, C++, and Fortran frontends. While the
+`-DKITSUNE_C_FLAGS_EXTRA`, `-DKITSUNE_CXX_FLAGS_EXTRA`, and
+`-DKITSUNE_Fortran_FLAGS_EXTRA` can be used to pass additional compiler options
+options to Kitsune's C, C++, and Fortran frontends respectively. While the
 standard `cmake` variables `CMAKE_C_FLAGS`, `CMAKE_CXX_FLAGS`, and
 `CMAKE_Fortran_FLAGS` could also be used for this, the flags would then also be
 used to compile other test-suite utilities such as [fpcmp](tools/fpcmp.c). This
 may not be desirable, so the use of the `KITSUNE_*` variables is strongly
-recommended in this case.
+recommended in this case. Similarly, `-DKITSUNE_LINKER_FLAGS_EXTRA` can be used
+to pass additional options to the linker when compiling with Kitsune.
 
 [Running](#Running) the tests in the test suite requires LLVM's `lit` utility.
 This can be found in the `bin/` directory within Kitsune's build directory.
@@ -87,8 +90,9 @@ the safer option.
 
 To ensure that the expected `lit` executable is used, use
 `-DTEST_SUITE_LIT=<path/to/lit>`. `-DTEST_SUITE_LIT_FLAGS` can be used to pass
-additional options to `lit`. Thie can be set to `-s` to produce less verbose
+additional options to `lit`. This can be set to `-s` to produce less verbose
 terminal output when running the test suite.
+
 
 ## Running ##
 
@@ -102,7 +106,7 @@ done as follows:
 $ ninja check
 ```
 
-An alternative is to use the `run-tests` script.In addition to running the
+An alternative is to use the `run-tests` script. In addition to running the
 tests, this also runs a post-processing pass that collects useful statistics
 into a concise report file. It can be run from the `<build>` directory.
 
@@ -131,6 +135,7 @@ a full list.
 
 [^1]: Some Linux distributions such as Arch and Debian package this together with the LLVM package. Otherwise it can be obtained from PyPi, for example, using `pip`. One way to do this may be `pip install --user lit`.
 
+
 ## Developer Guide ##
 
 This section contains notes on the organization of the Kitsune-specific tests
@@ -143,6 +148,11 @@ trailing extensions on the single-source test file names are significant. These
 are used to determine the correct way to build the files and their use is
 _required_.
 
+```{note}
+These restrictions are only for single-source tests. Multi-source tests may
+use the "standard" extensions for source files.
+```
+
 Files containing Kitsune-specific extensions/annotations *must* end with
 `.kit.c`, `.kit.cpp`, or `.kit.f90` for C, C++ and Fortran respectively. Only
 files with this name will be compiled with the various tapir targets being
@@ -151,9 +161,9 @@ tested.
 Tests using Kokkos must end with `.kokkos.kit.cpp` if they are intended to be
 used to test Kitsune's `-fkokkos` mode. Currently, these are only built with
 the GPU-centric tapir targets, `cuda`, and `hip`. These tests should only
-contain supported Kokkos' constructs. At the time of writing, this is only
-`kokkos::parallel_for` and a limited set of execution policies. `kokkos::View`s
-are not yet supported and will likely never be supported.
+contain supported Kokkos constructs. At the time of writing, this is only
+`kokkos::parallel_for` and a limited number of execution policies.
+`kokkos::View`s will likely never be supported.
 
 Cuda-language implementations for NVIDIA GPU's must end with `.cu`. HIP-language
 implementations for AMD GPU's must end with `.hip`.
@@ -161,12 +171,7 @@ implementations for AMD GPU's must end with `.hip`.
 Files ending with `.kokkos.cpp` (note the absence of `.kit` here) are treated
 as "vanilla" Kokkos and not compiled with any tapir target. These may contain
 any Kokkos construct. These, too, are linked against an appropriate Kokkos
-GPU backend.
-
-```{note}
-These restrictions are only for single-source tests. Multi-source tests may
-use the "standard" extensions for source files.
-```
+GPU backend. These are only useful when benchmarking Kitsune.
 
 ### Organization ###
 
@@ -184,7 +189,7 @@ All tests should be within one of the three top-level directories, `Benchmarks`,
 
   - *`MultiSource`* contains multi-source tests that are, currently, only used
     for correctness checks. We may support using these for performance
-    comaprisons at some point, but it is not currently planned.
+    comparisons at some point, but it is not currently planned.
 
 ### Benchmarks ###
 
