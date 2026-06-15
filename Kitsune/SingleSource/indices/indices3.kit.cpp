@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
         expected.push_back({i, j, k});
 
   buf = setup(8192);
-  test(9, 11, 10);
+  test(m, n, p);
   bool err = check(buf, expected);
   teardown(buf);
 
